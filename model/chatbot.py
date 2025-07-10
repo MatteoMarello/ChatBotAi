@@ -3,10 +3,8 @@ from tkinter import scrolledtext
 import requests
 import json
 
-# Inserisci qui la tua API Key
-API_KEY = "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"
+API_KEY = "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"
 
-# Funzione per inviare il messaggio all'AI
 def send_message():
     user_input = user_entry.get()
     if not user_input.strip():
@@ -25,7 +23,7 @@ def send_message():
         "messages": [
             {"role": "user", "content": user_input}
         ],
-        "max_tokens": 500,
+        "max_tokens": 1000,
     }
 
     try:
@@ -33,31 +31,38 @@ def send_message():
                                  headers=headers, data=json.dumps(data))
 
         result = response.json()
-        choice = result["choices"][0]
-        ai_response = choice.get("message", {}).get("content", "").strip()
-        reasoning = choice.get("message", {}).get("reasoning", "").strip()
 
-        if ai_response:
-            chat_log.insert(tk.END, "🤖 AI: " + ai_response + "\n\n")
-        elif reasoning:
-            chat_log.insert(tk.END, "🤖 AI (ragionamento): " + reasoning + "\n\n")
+        # Controllo se 'choices' esiste nella risposta
+        if 'choices' in result and result['choices']:
+            choice = result['choices'][0]
+            ai_response = choice.get("message", {}).get("content", "").strip()
+            reasoning = choice.get("message", {}).get("reasoning", "").strip()
+
+            if ai_response:
+                chat_log.insert(tk.END, "🤖 AI: " + ai_response + "\n\n")
+            elif reasoning:
+                chat_log.insert(tk.END, "🤖 AI (ragionamento): " + reasoning + "\n\n")
+            else:
+                chat_log.insert(tk.END, "⚠️ Nessuna risposta.\n\n")
+
+        elif 'error' in result:
+            # Mostra l'errore specifico ricevuto dall'API
+            error_message = result['error'].get('message', 'Errore sconosciuto.')
+            chat_log.insert(tk.END, f"❌ Errore API: {error_message}\n\n")
         else:
-            chat_log.insert(tk.END, "⚠️ Nessuna risposta.\n\n")
+            chat_log.insert(tk.END, "⚠️ Nessuna risposta valida dal server.\n\n")
 
         chat_log.see(tk.END)
 
     except Exception as e:
-        chat_log.insert(tk.END, f"❌ Errore: {e}\n\n")
+        chat_log.insert(tk.END, f"❌ Errore di sistema: {e}\n\n")
 
-# Creazione finestra principale
 root = tk.Tk()
 root.title("Chat AI - DeepSeek via OpenRouter")
 
-# Area chat
 chat_log = scrolledtext.ScrolledText(root, wrap=tk.WORD, width=60, height=20, font=("Arial", 10))
 chat_log.pack(padx=10, pady=10)
 
-# Campo input + bottone invio
 user_entry = tk.Entry(root, width=50, font=("Arial", 12))
 user_entry.pack(padx=10, pady=(0,10))
 user_entry.bind("<Return>", lambda event: send_message())
@@ -65,5 +70,4 @@ user_entry.bind("<Return>", lambda event: send_message())
 send_button = tk.Button(root, text="Invia", command=send_message)
 send_button.pack(pady=(0,10))
 
-# Avvio app
 root.mainloop()
