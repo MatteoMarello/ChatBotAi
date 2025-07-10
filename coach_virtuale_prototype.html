@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coach Virtuale</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+        }
+
+        .sidebar {
+            width: 80px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-right: 1px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 0;
+            position: fixed;
+            height: 100vh;
+            z-index: 1000;
+        }
+
+        .nav-item {
+            width: 50px;
+            height: 50px;
+            margin: 15px 0;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 24px;
+            border: none;
+            color: white;
+        }
+
+        .nav-item:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: scale(1.1);
+        }
+
+        .nav-item.active {
+            background: rgba(46, 139, 87, 0.8);
+            box-shadow: 0 8px 32px rgba(46, 139, 87, 0.3);
+        }
+
+        .main-content {
+            flex: 1;
+            margin-left: 80px;
+            padding: 20px;
+            max-width: 500px;
+            margin-left: 100px;
+        }
+
+        .screen {
+            display: none;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            min-height: 600px;
+        }
+
+        .screen.active {
+            display: block;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .screen-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .workout-plan {
+            margin-bottom: 20px;
+        }
+
+        .day-section {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-left: 4px solid #2E8B57;
+        }
+
+        .day-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #2E8B57;
+            margin-bottom: 10px;
+        }
+
+        .exercise-list {
+            list-style: none;
+            padding-left: 15px;
+        }
+
+        .exercise-item {
+            padding: 8px 0;
+            color: #555;
+            font-size: 14px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .exercise-item:last-child {
+            border-bottom: none;
+        }
+
+        .btn {
+            background: linear-gradient(45deg, #2E8B57, #32CD32);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 5px;
+            box-shadow: 0 4px 15px rgba(46, 139, 87, 0.3);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(46, 139, 87, 0.4);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(45deg, #FFA500, #FF8C00);
+            box-shadow: 0 4px 15px rgba(255, 165, 0, 0.3);
+        }
+
+        .feedback-section {
+            background: #f0f8ff;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+            border: 2px dashed #87CEEB;
+        }
+
+        .feedback-input {
+            width: 100%;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            font-size: 16px;
+            resize: vertical;
+            min-height: 80px;
+            margin-bottom: 10px;
+        }
+
+        .feedback-input:focus {
+            outline: none;
+            border-color: #2E8B57;
+            box-shadow: 0 0 0 3px rgba(46, 139, 87, 0.1);
+        }
+
+        .today-exercises {
+            background: #fff;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .exercise-checkbox {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            margin: 10px 0;
+            background: #f8f9fa;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .exercise-checkbox:hover {
+            background: #e9ecef;
+        }
+
+        .exercise-checkbox input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            margin-right: 15px;
+            cursor: pointer;
+        }
+
+        .stats-card {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            margin: 15px 0;
+            text-align: center;
+        }
+
+        .stats-number {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .stats-label {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .progress-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            margin: 10px 0;
+        }
+
+        .progress-gain {
+            color: #32CD32;
+            font-weight: 600;
+        }
+
+        .workout-history {
+            background: #fff;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .history-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .history-item:last-child {
+            border-bottom: none;
+        }
+
+        .quick-buttons {
+            display: flex;
+            gap: 10px;
+            margin: 15px 0;
+            flex-wrap: wrap;
+        }
+
+        .quick-btn {
+            background: rgba(46, 139, 87, 0.1);
+            color: #2E8B57;
+            border: 1px solid #2E8B57;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .quick-btn:hover {
+            background: #2E8B57;
+            color: white;
+        }
+
+        .separator {
+            height: 2px;
+            background: linear-gradient(90deg, #2E8B57, #32CD32);
+            margin: 30px 0;
+            border-radius: 2px;
+        }
+
+        .adaptation-preview {
+            background: #fff3cd;
+            border: 1px solid #ffeeba;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 15px 0;
+            display: none;
+        }
+
+        .adaptation-preview.show {
+            display: block;
+            animation: slideDown 0.3s ease;
+        }
+
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .week-indicator {
+            background: rgba(46, 139, 87, 0.1);
+            padding: 10px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+            color: #2E8B57;
+            font-weight: 600;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 60px;
+            }
+            
+            .main-content {
+                margin-left: 80px;
+                padding: 15px;
+            }
+            
+            .screen {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <button class="nav-item active" onclick="showScreen('scheda')" title="La Mia Scheda">
+            📋
+        </button>
+        <button class="nav-item" onclick="showScreen('oggi')" title="Allenamento Oggi">
+            🏋️
+        </button>
+        <button class="nav-item" onclick="showScreen('progressi')" title="I Miei Progressi">
+            📈
+        </button>
+        <button class="nav-item" onclick="showScreen('settings')" title="Impostazioni">
+            ⚙️
+        </button>
+    </div>
+
+    <div class="main-content">
+        <!-- SCHERMATA 1: LA MIA SCHEDA -->
+        <div id="scheda" class="screen active">
+            <div class="screen-title">
+                📋 LA MIA SCHEDA
+            </div>
+            
+            <div class="week-indicator">
+                🗓️ Settimana corrente (2/4)
+            </div>
+
+            <div class="workout-plan">
+                <div class="day-section">
+                    <div class="day-title">📅 LUNEDÌ - Push (Upper)</div>
+                    <ul class="exercise-list">
+                        <li class="exercise-item">├─ Panca piana 4x8-10</li>
+                        <li class="exercise-item">├─ Spinte manubri 3x10-12</li>
+                        <li class="exercise-item">├─ Dip 3x8-10</li>
+                        <li class="exercise-item">└─ Tricep extension 3x12-15</li>
+                    </ul>
+                </div>
+
+                <div class="day-section">
+                    <div class="day-title">📅 MERCOLEDÌ - Pull (Upper)</div>
+                    <ul class="exercise-list">
+                        <li class="exercise-item">├─ Trazioni 4x6-8</li>
+                        <li class="exercise-item">├─ Rematore 3x10-12</li>
+                        <li class="exercise-item">└─ Bicep curl 3x12-15</li>
+                    </ul>
+                </div>
+
+                <div class="day-section">
+                    <div class="day-title">📅 VENERDÌ - Legs</div>
+                    <ul class="exercise-list">
+                        <li class="exercise-item">├─ Squat 4x8-10</li>
+                        <li class="exercise-item">├─ Stacchi 3x8-10</li>
+                        <li class="exercise-item">└─ Calf raises 3x15-20</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div style="text-align: center; margin-top: 30px;">
+                <button class="btn">MODIFICA SCHEDA</button>
+                <button class="btn btn-secondary">RIGENERA</button>
+            </div>
+        </div>
+
+        <!-- SCHERMATA 2: ALLENAMENTO OGGI -->
+        <div id="oggi" class="screen">
+            <div class="screen-title">
+                🏋️ ALLENAMENTO OGGI
+            </div>
+            <div style="color: #666; margin-bottom: 20px;">Mercoledì 9 Luglio - Pull Day</div>
+
+            <div class="feedback-section">
+                <h3 style="margin-bottom: 15px; color: #2E8B57;">💬 COME TI SENTI OGGI?</h3>
+                <textarea class="feedback-input" id="preWorkoutFeedback" placeholder="Scrivi qui il tuo stato... es: 'Ho dormito poco e sono stanco' o 'Mi sento carico!'"></textarea>
+                
+                <div class="quick-buttons">
+                    <button class="quick-btn" onclick="setQuickFeedback('😴 Sono stanco oggi')">😴 Stanco</button>
+                    <button class="quick-btn" onclick="setQuickFeedback('🔥 Mi sento carico!')">🔥 Carico</button>
+                    <button class="quick-btn" onclick="setQuickFeedback('⏰ Ho solo 30 minuti')">⏰ Poco tempo</button>
+                    <button class="quick-btn" onclick="setQuickFeedback('💪 Tutto normale')">💪 Normale</button>
+                </div>
+
+                <button class="btn" onclick="adaptWorkout()">ADATTA ALLENAMENTO 🎯</button>
+            </div>
+
+            <div class="adaptation-preview" id="adaptationPreview">
+                <h4 style="color: #856404;">🎯 Adattamento suggerito:</h4>
+                <p id="adaptationText"></p>
+                <button class="btn" style="margin-top: 10px;" onclick="acceptAdaptation()">ACCETTA</button>
+                <button class="btn btn-secondary" onclick="rejectAdaptation()">RIFIUTA</button>
+            </div>
+
+            <div class="separator"></div>
+
+            <div class="today-exercises">
+                <h3 style="margin-bottom: 15px; color: #333;">📋 ESERCIZI DI OGGI:</h3>
+                <div class="exercise-checkbox">
+                    <input type="checkbox" id="ex1">
+                    <label for="ex1">Trazioni 4x6-8</label>
+                </div>
+                <div class="exercise-checkbox">
+                    <input type="checkbox" id="ex2">
+                    <label for="ex2">Rematore 3x10-12</label>
+                </div>
+                <div class="exercise-checkbox">
+                    <input type="checkbox" id="ex3">
+                    <label for="ex3">Bicep curl 3x12-15</label>
+                </div>
+            </div>
+
+            <div style="text-align: center; margin: 20px 0;">
+                <button class="btn" onclick="startWorkout()">INIZIA ALLENAMENTO 🚀</button>
+            </div>
+
+            <div class="separator"></div>
+
+            <div class="feedback-section">
+                <h3 style="margin-bottom: 15px; color: #2E8B57;">💭 FEEDBACK POST-ALLENAMENTO</h3>
+                <textarea class="feedback-input" id="postWorkoutFeedback" placeholder="Come è andato oggi? es: 'Troppo facile' o 'Perfetto' o 'Molto impegnativo'"></textarea>
+                <button class="btn" onclick="saveFeedback()">SALVA FEEDBACK 📝</button>
+            </div>
+        </div>
+
+        <!-- SCHERMATA 3: I MIEI PROGRESSI -->
+        <div id="progressi" class="screen">
+            <div class="screen-title">
+                📈 I MIEI PROGRESSI
+            </div>
+
+            <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+                <div class="stats-card" style="flex: 1;">
+                    <div class="stats-number">12</div>
+                    <div class="stats-label">🔥 Streak giorni</div>
+                </div>
+                <div class="stats-card" style="flex: 1;">
+                    <div class="stats-number">2/3</div>
+                    <div class="stats-label">📊 Questa settimana</div>
+                </div>
+            </div>
+
+            <div style="background: #fff; border-radius: 15px; padding: 20px; margin: 20px 0;">
+                <h3 style="margin-bottom: 15px; color: #2E8B57;">💪 FORZA (ultimi 30 giorni)</h3>
+                <div class="progress-item">
+                    <span>Panca piana</span>
+                    <span class="progress-gain">65kg → 70kg (+5kg) 📈</span>
+                </div>
+                <div class="progress-item">
+                    <span>Squat</span>
+                    <span class="progress-gain">80kg → 85kg (+5kg) 📈</span>
+                </div>
+                <div class="progress-item">
+                    <span>Trazioni</span>
+                    <span class="progress-gain">6 → 8 reps (+2) 📈</span>
+                </div>
+            </div>
+
+            <div class="workout-history">
+                <h3 style="margin-bottom: 15px; color: #333;">📅 STORICO ALLENAMENTI</h3>
+                <div class="history-item">
+                    <span>9 Lug - Pull Day ✅</span>
+                    <span style="color: #666;">(45 min)</span>
+                </div>
+                <div class="history-item">
+                    <span>7 Lug - Push Day ✅</span>
+                    <span style="color: #666;">(50 min)</span>
+                </div>
+                <div class="history-item">
+                    <span>5 Lug - Legs Day ✅</span>
+                    <span style="color: #666;">(40 min)</span>
+                </div>
+                <div class="history-item">
+                    <span>3 Lug - Pull Day ✅</span>
+                    <span style="color: #666;">(42 min)</span>
+                </div>
+            </div>
+
+            <div style="text-align: center; margin-top: 30px;">
+                <button class="btn">ESPORTA DATI</button>
+                <button class="btn btn-secondary">STATISTICHE</button>
+            </div>
+        </div>
+
+        <!-- SCHERMATA 4: IMPOSTAZIONI -->
+        <div id="settings" class="screen">
+            <div class="screen-title">
+                ⚙️ IMPOSTAZIONI
+            </div>
+            <div style="text-align: center; margin-top: 100px; color: #666;">
+                <h3>Impostazioni</h3>
+                <p>Qui ci saranno le impostazioni dell'app</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showScreen(screenId) {
+            // Nascondi tutte le schermate
+            document.querySelectorAll('.screen').forEach(screen => {
+                screen.classList.remove('active');
+            });
+            
+            // Rimuovi active da tutti i nav items
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            
+            // Mostra la schermata selezionata
+            document.getElementById(screenId).classList.add('active');
+            
+            // Attiva il nav item corrispondente
+            event.target.classList.add('active');
+        }
+
+        function setQuickFeedback(text) {
+            document.getElementById('preWorkoutFeedback').value = text;
+        }
+
+        function adaptWorkout() {
+            const feedback = document.getElementById('preWorkoutFeedback').value;
+            const preview = document.getElementById('adaptationPreview');
+            const adaptationText = document.getElementById('adaptationText');
+            
+            if (!feedback.trim()) {
+                alert('Scrivi prima come ti senti!');
+                return;
+            }
+            
+            // Simulazione logica di adattamento
+            let adaptation = '';
+            if (feedback.toLowerCase().includes('stanco') || feedback.includes('😴')) {
+                adaptation = 'Riduco il volume del 20% e abbasso l\'intensità. Trazioni: 3x6-8 invece di 4x6-8';
+            } else if (feedback.toLowerCase().includes('carico') || feedback.includes('🔥')) {
+                adaptation = 'Aggiungo 1 serie extra agli esercizi principali. Trazioni: 5x6-8 invece di 4x6-8';
+            } else if (feedback.toLowerCase().includes('tempo') || feedback.includes('⏰')) {
+                adaptation = 'Tolgo 1 esercizio e riduco i tempi di recupero. Rimuovo bicep curl';
+            } else {
+                adaptation = 'Nessuna modifica necessaria, l\'allenamento rimane invariato.';
+            }
+            
+            adaptationText.textContent = adaptation;
+            preview.classList.add('show');
+        }
+
+        function acceptAdaptation() {
+            document.getElementById('adaptationPreview').classList.remove('show');
+            alert('Adattamento applicato! 🎯');
+        }
+
+        function rejectAdaptation() {
+            document.getElementById('adaptationPreview').classList.remove('show');
+            alert('Adattamento rifiutato. Allenamento originale mantenuto.');
+        }
+
+        function startWorkout() {
+            alert('Allenamento iniziato! 🚀\n\nQuesta sarebbe la modalità di esecuzione dell\'allenamento.');
+        }
+
+        function saveFeedback() {
+            const feedback = document.getElementById('postWorkoutFeedback').value;
+            if (!feedback.trim()) {
+                alert('Scrivi prima il tuo feedback!');
+                return;
+            }
+            
+            alert('Feedback salvato! 📝\n\nIl sistema lo userà per migliorare i prossimi allenamenti.');
+            document.getElementById('postWorkoutFeedback').value = '';
+        }
+
+        // Aggiungi animazioni ai checkbox
+        document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                if (this.checked) {
+                    this.parentElement.style.background = '#d4edda';
+                    this.parentElement.style.borderLeft = '4px solid #28a745';
+                } else {
+                    this.parentElement.style.background = '#f8f9fa';
+                    this.parentElement.style.borderLeft = 'none';
+                }
+            });
+        });
+
+        // Simula dati in tempo reale
+        setInterval(function() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('it-IT', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+            document.title = `Coach Virtuale - ${timeString}`;
+        }, 1000);
+    </script>
+</body>
+</html>
