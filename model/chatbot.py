@@ -3,7 +3,7 @@ from tkinter import scrolledtext
 import requests
 import json
 
-API_KEY = "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"
+API_KEY = ""
 
 def send_message():
     user_input = user_entry.get()
