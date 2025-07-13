@@ -2,5 +2,5 @@
 user=root
 password=05042003Matteo
 host=127.0.0.1
-database=esercizipalestra
+database=fitness_db
 raise_on_warnings=True
