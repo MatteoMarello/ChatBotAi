@@ -4,23 +4,6 @@ from model.esercizio import Esercizio
 class DAO():
 
     @staticmethod
-    def getEsercizi():
-        cnx = DBConnect.get_connection()
-        cursor = cnx.cursor(dictionary = True)
-
-        query = """ select distinct year from formula1.seasons s """
-
-        cursor.execute(query)
-
-        results = []
-        for row in cursor:
-            results.append(row["year"])
-
-        cursor.close()
-        cnx.close()
-        return results
-
-    @staticmethod
     def getEsercizi(context, muscolo):
         cnx = DBConnect.get_connection()
         cursor = cnx.cursor(dictionary = True)
@@ -44,6 +27,6 @@ order by ecp.priority_level asc
 
 if __name__ == '__main__':
     myDAO = DAO()
-    print(myDAO.getEsercizi("Home Manubri","Bicipiti"))
+    print(myDAO.getEsercizi("Palestra Completa","petto"))
 
 
