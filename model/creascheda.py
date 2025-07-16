@@ -10,7 +10,7 @@ from model.workoutday import WorkoutDay
 # FILE: model.py (LOGICA PRINCIPALE)
 # ===============================================================
 class Model:
-    # --- METODO __init__ AGGIUNTO ---
+    # --- METODO __init__ AGGIORNATO ---
     def __init__(self):
         """
         Costruttore della classe Model.
@@ -73,40 +73,109 @@ class Model:
         """Distribuisce le serie per rep range (50% pesante, 40% medio, 10% leggero)."""
         if volume_effettivo == 0: return 0, 0, 0
 
-        tot_5_7 = round(volume_effettivo * 0.50)
-        tot_12_14 = round(volume_effettivo * 0.35)
+        tot_pesante = round(volume_effettivo * 0.50)
+        tot_medio = round(volume_effettivo * 0.40)
         # Assicura che la somma sia corretta
-        tot_20_22_prov = volume_effettivo - tot_5_7 - tot_12_14
+        tot_leggero_prov = volume_effettivo - tot_pesante - tot_medio
 
-        if tot_20_22_prov < 0:
-            tot_12_14 += tot_20_22_prov
-            tot_20_22 = 0
+        if tot_leggero_prov < 0:
+            tot_medio += tot_leggero_prov
+            tot_leggero = 0
         else:
-            tot_20_22 = tot_20_22_prov
+            tot_leggero = tot_leggero_prov
 
         # Correzione finale per arrotondamenti
-        if (tot_5_7 + tot_12_14 + tot_20_22) != volume_effettivo:
-            tot_5_7 = volume_effettivo - tot_12_14 - tot_20_22
+        if (tot_pesante + tot_medio + tot_leggero) != volume_effettivo:
+            tot_pesante = volume_effettivo - tot_medio - tot_leggero
 
-        return int(tot_5_7), int(tot_12_14), int(tot_20_22)
+        return int(tot_pesante), int(tot_medio), int(tot_leggero)
 
-    def _distribuisci_serie_giorni(self, volume_totale, giorni):
-        """Distribuisce le serie totali nei giorni disponibili, evitando giorni con 1 sola serie."""
-        if giorni <= 0: return []
-        if volume_totale <= 0: return [0] * giorni
+    def _distribuisci_serie_giorni_intermedio(self, volume_totale, giorni=3):
+        """
+        Distribuisce le serie totali nei 3 giorni per atleti intermedi.
+        Logica:
+        - Fino a 6 serie: distribuzione su 2 giorni, evitando serie singole
+        - Da 7 serie in su: distribuzione su 3 giorni, evitando serie singole quando possibile
+        """
+        if volume_totale <= 0:
+            return [0, 0, 0]
 
-        # Assicura almeno 2 serie per giorno attivo, se possibile
-        serie_per_giorno = [0] * giorni
-        giorni_da_usare = min(giorni, volume_totale // 2 if volume_totale > 1 else 1)
-        if giorni_da_usare == 0 and volume_totale > 0:
-            giorni_da_usare = 1
+        if volume_totale <= 6:
+            # Distribuzione su 2 giorni - evita serie singole
+            serie_per_giorno = [0, 0, 0]
 
-        if giorni_da_usare > 0:
-            base, extra = divmod(volume_totale, giorni_da_usare)
-            for i in range(giorni_da_usare):
-                serie_per_giorno[i] = base + (1 if i < extra else 0)
+            if volume_totale == 2:
+                # 2 serie = 2-0-0
+                giorni_attivi = random.sample(range(3), 1)
+                serie_per_giorno[giorni_attivi[0]] = 2
+            elif volume_totale == 3:
+                # 3 serie = 3-0-0
+                giorni_attivi = random.sample(range(3), 1)
+                serie_per_giorno[giorni_attivi[0]] = 3
+            elif volume_totale == 4:
+                # 4 serie = 2-2-0
+                giorni_attivi = random.sample(range(3), 2)
+                serie_per_giorno[giorni_attivi[0]] = 2
+                serie_per_giorno[giorni_attivi[1]] = 2
+            elif volume_totale == 5:
+                # 5 serie = 3-2-0
+                giorni_attivi = random.sample(range(3), 2)
+                serie_per_giorno[giorni_attivi[0]] = 3
+                serie_per_giorno[giorni_attivi[1]] = 2
+            elif volume_totale == 6:
+                # 6 serie = 3-3-0
+                giorni_attivi = random.sample(range(3), 2)
+                serie_per_giorno[giorni_attivi[0]] = 3
+                serie_per_giorno[giorni_attivi[1]] = 3
 
-        random.shuffle(serie_per_giorno)
+        else:
+            # Distribuzione su 3 giorni - evita serie singole quando possibile
+            serie_per_giorno = [0, 0, 0]
+
+            if volume_totale == 7:
+                # 7 serie = 3-2-2
+                serie_per_giorno = [3, 2, 2]
+            elif volume_totale == 8:
+                # 8 serie = 3-3-2
+                serie_per_giorno = [3, 3, 2]
+            elif volume_totale == 9:
+                # 9 serie = 3-3-3
+                serie_per_giorno = [3, 3, 3]
+            elif volume_totale == 10:
+                # 10 serie = 4-3-3
+                serie_per_giorno = [4, 3, 3]
+            elif volume_totale == 11:
+                # 11 serie = 4-4-3
+                serie_per_giorno = [4, 4, 3]
+            elif volume_totale == 12:
+                # 12 serie = 4-4-4
+                serie_per_giorno = [4, 4, 4]
+            else:
+                # Per volumi maggiori, distribuzione standard evitando serie singole
+                base = volume_totale // 3
+                extra = volume_totale % 3
+
+                serie_per_giorno = [base] * 3
+
+                # Distribuisci le serie extra
+                for i in range(extra):
+                    serie_per_giorno[i] += 1
+
+                # Se ci sono serie singole, ridistribuisci
+                if min(serie_per_giorno) == 1:
+                    # Sposta le serie singole verso gli altri giorni
+                    for i in range(3):
+                        if serie_per_giorno[i] == 1:
+                            serie_per_giorno[i] = 0
+                            # Aggiungi la serie al giorno con meno serie (esclusi quelli con 0)
+                            giorni_non_zero = [j for j in range(3) if serie_per_giorno[j] > 0]
+                            if giorni_non_zero:
+                                min_idx = min(giorni_non_zero, key=lambda x: serie_per_giorno[x])
+                                serie_per_giorno[min_idx] += 1
+
+            # Mescola per randomizzare la distribuzione
+            random.shuffle(serie_per_giorno)
+
         return serie_per_giorno
 
     def _ordina_muscoli_fullbody(self, muscoli_da_allenare, muscolo_target):
@@ -139,10 +208,10 @@ class Model:
         except:
             return (0, 0)  # Default if parsing fails
 
-    def _crea_fullbody_giorni(self, context, muscolo_target, giorni):
-        """Crea una settimana di allenamento Full Body con la nuova logica."""
+    def _crea_fullbody_intermedio(self, context, muscolo_target, giorni=3):
+        """Crea una settimana di allenamento Full Body per atleti intermedi."""
 
-        MIN_DIRECT_SETS = 4
+        MIN_DIRECT_SETS = 6  # Cambiato da 4 a 6 per intermedi
         settimana_numero = 1
         oggi = datetime.now()
         days = [WorkoutDay(id_giorno=i + 1, settimana=settimana_numero, split_type="Full Body", data=oggi) for i in
@@ -162,26 +231,38 @@ class Model:
         for ordine_muscolo, muscolo in enumerate(ordered_muscles):
             print(f"Processing: {muscolo}")
 
-            volume_totale_target = self.get_weekly_sets("principiante", muscolo, settimana_numero)
+            # Calcola volume base per intermedio
+            volume_base = self.get_weekly_sets("intermedio", muscolo, settimana_numero)
+
+            # Se è il muscolo target, aggiungi 30% di volume
             if muscolo == muscolo_target:
-                volume_totale_target = int(round(volume_totale_target * 1.2))
+                volume_totale_target = int(round(volume_base * 1.3))
+                print(f"  - Target muscle detected! Base: {volume_base}, With 30% bonus: {volume_totale_target}")
+            else:
+                volume_totale_target = volume_base
+
             print(f"  - Target volume: {volume_totale_target}")
 
             volume_indiretto_accumulato = self._calcola_coinvolgimento_indiretto(esercizi_scelti, [muscolo])[muscolo]
             print(f"  - Indirect volume from other exercises: {volume_indiretto_accumulato:.1f}")
 
-            volume_mancante = volume_totale_target - volume_indiretto_accumulato
-            volume_effettivo_da_aggiungere = max(MIN_DIRECT_SETS, volume_mancante)
-            volume_effettivo = max(0, int(round(volume_effettivo_da_aggiungere)))
+            # Calcola le serie effettive (dirette + indirette)
+            serie_effettive_attuali = volume_indiretto_accumulato
+            volume_mancante = volume_totale_target - serie_effettive_attuali
 
-            print(
-                f"  - Required direct sets to add (max of {MIN_DIRECT_SETS} and {volume_mancante:.1f}): {volume_effettivo}")
+            # Vincolo: almeno 6 serie dirette per ogni muscolo
+            volume_diretto_da_aggiungere = max(MIN_DIRECT_SETS, volume_mancante)
+            volume_effettivo = max(0, int(round(volume_diretto_da_aggiungere)))
+
+            print(f"  - Current effective sets: {serie_effettive_attuali:.1f}")
+            print(f"  - Missing volume: {volume_mancante:.1f}")
+            print(f"  - Direct sets to add (min {MIN_DIRECT_SETS}): {volume_effettivo}")
 
             if volume_effettivo <= 0:
                 print(f"  - Skipping direct work for {muscolo}, target met.")
                 continue
 
-            # MODIFICA PRINCIPALE: Prendi sempre i primi due esercizi dalla lista ordinata per priorità
+            # Prendi i primi due esercizi dalla lista ordinata per priorità
             esercizi_disponibili = DAO.getEsercizi(context, muscolo)
             if not esercizi_disponibili:
                 print(f"  - No exercises found for {muscolo}.")
@@ -220,22 +301,29 @@ class Model:
             esercizi_map_globale[e_heavy.id] = e_heavy
             esercizi_map_globale[e_light.id] = e_light
 
-            tot_5_7, tot_12_14, tot_20_22 = self._calcola_distribuzione_rep_range(volume_effettivo)
+            # Distribuzione: 50% pesante (6-8), 40% medio (12-14), 10% leggero (20-22)
+            tot_pesante, tot_medio, tot_leggero = self._calcola_distribuzione_rep_range(volume_effettivo)
             print(
-                f"  - Sets distribution: Heavy(5-7): {tot_5_7}, Medium(12-14): {tot_12_14}, Light(20-22): {tot_20_22}")
+                f"  - Sets distribution: Heavy(6-8): {tot_pesante}, Medium(12-14): {tot_medio}, Light(20-22): {tot_leggero}")
 
-            esercizi_scelti[e_heavy] = esercizi_scelti.get(e_heavy, 0) + tot_5_7
-            esercizi_scelti[e_light] = esercizi_scelti.get(e_light, 0) + tot_12_14 + tot_20_22
+            # Aggiorna il conteggio degli esercizi scelti
+            esercizi_scelti[e_heavy] = esercizi_scelti.get(e_heavy, 0) + tot_pesante
+            esercizi_scelti[e_light] = esercizi_scelti.get(e_light, 0) + tot_medio + tot_leggero
 
-            distribuzione_giorni_heavy = self._distribuisci_serie_giorni(tot_5_7, giorni)
-            distribuzione_giorni_light = self._distribuisci_serie_giorni(tot_12_14 + tot_20_22, giorni)
+            # Distribuisci le serie sui giorni usando la logica per intermedi
+            distribuzione_giorni_heavy = self._distribuisci_serie_giorni_intermedio(tot_pesante, giorni)
+            distribuzione_giorni_light = self._distribuisci_serie_giorni_intermedio(tot_medio + tot_leggero, giorni)
 
+            print(f"  - Heavy distribution across days: {distribuzione_giorni_heavy}")
+            print(f"  - Light distribution across days: {distribuzione_giorni_light}")
+
+            # Assegna gli esercizi ai giorni
             for i in range(giorni):
                 if distribuzione_giorni_heavy[i] > 0:
                     esercizi_per_giorno[i].append((e_heavy, distribuzione_giorni_heavy[i],
-                                                   ["5-7"] * distribuzione_giorni_heavy[i], ordine_muscolo))
+                                                   ["6-8"] * distribuzione_giorni_heavy[i], ordine_muscolo))
                 if distribuzione_giorni_light[i] > 0:
-                    reps_light_disponibili = ["12-14"] * tot_12_14 + ["20-22"] * tot_20_22
+                    reps_light_disponibili = ["12-14"] * tot_medio + ["20-22"] * tot_leggero
                     reps_da_assegnare = random.sample(reps_light_disponibili,
                                                       min(len(reps_light_disponibili), distribuzione_giorni_light[i]))
                     if reps_da_assegnare:
@@ -253,23 +341,27 @@ class Model:
 
         return TrainingWeek(numero_settimana=settimana_numero, start_date=oggi, workout_days=days)
 
+    def getSchedaFullBodyIntermedio(self, context, muscolo_target):
+        """Metodo per generare schede Full Body per atleti intermedi (3 giorni)."""
+        return self._crea_fullbody_intermedio(context, muscolo_target, giorni=3)
+
     def getSchedaFullBody(self, context, muscolo_target, giorni):
-        """Metodo unificato per generare schede Full Body."""
+        """Metodo unificato per generare schede Full Body (mantenuto per compatibilità)."""
         if giorni not in [2, 3]:
             raise ValueError("La frequenza per Full Body deve essere 2 o 3.")
         return self._crea_fullbody_giorni(context, muscolo_target, giorni)
 
 
 # ===============================================================
-# Esempio di Utilizzo (invariato ma ora funzionante)
+# Esempio di Utilizzo
 # ===============================================================
 if __name__ == "__main__":
     model = Model()
 
-    print("********** GENERAZIONE SCHEDA 3 GIORNI - FOCUS PETTO **********\n")
-    scheda_3_giorni = model.getSchedaFullBody("Palestra Completa", "Petto", giorni=3)
-    print(scheda_3_giorni)
+    print("********** GENERAZIONE SCHEDA FULL BODY INTERMEDIO - FOCUS PETTO **********\n")
+    scheda_intermedio = model.getSchedaFullBodyIntermedio("Palestra Completa", "Petto")
+    print(scheda_intermedio)
 
-    print("\n\n********** GENERAZIONE SCHEDA 2 GIORNI - FOCUS SPALLE **********\n")
-    scheda_2_giorni = model.getSchedaFullBody("Home Manubri", "Spalle", giorni=2)
-    print(scheda_2_giorni)
+    print("\n\n********** GENERAZIONE SCHEDA FULL BODY INTERMEDIO - FOCUS SPALLE **********\n")
+    scheda_intermedio_spalle = model.getSchedaFullBodyIntermedio("Palestra Completa", "Spalle")
+    print(scheda_intermedio_spalle)
