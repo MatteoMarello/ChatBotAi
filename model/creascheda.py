@@ -44,13 +44,13 @@ class Model:
     def get_weekly_sets(self, livello, muscolo, mesociclo):
         """Calcola il volume settimanale target per un muscolo."""
         base_volumes = {
-            "principiante": {"Petto": (10, 16), "Schiena": (12, 18), "Spalle": (16, 22), "Bicipiti": (8, 14),
+            "principiante": {"Petto": (10, 16), "Schiena": (12, 18), "Spalle": (12, 18), "Bicipiti": (8, 14),
                              "Tricipiti": (8, 14), "Quadricipiti": (10, 18), "Femorali": (6, 12), "Glutei": (8, 14),
                              "Polpacci": (6, 12)},
-            "intermedio": {"Petto": (11, 20), "Schiena": (13, 20), "Spalle": (18, 24), "Bicipiti": (9, 16),
+            "intermedio": {"Petto": (11, 20), "Schiena": (13, 20), "Spalle": (13, 20), "Bicipiti": (9, 16),
                            "Tricipiti": (9, 16), "Quadricipiti": (11, 20), "Femorali": (7, 14), "Glutei": (9, 16),
                            "Polpacci": (8, 14)},
-            "avanzato": {"Petto": (12, 22), "Schiena": (14, 22), "Spalle": (20, 26), "Bicipiti": (10, 18),
+            "avanzato": {"Petto": (12, 22), "Schiena": (14, 22), "Spalle": (14, 22), "Bicipiti": (10, 18),
                          "Tricipiti": (10, 18), "Quadricipiti": (12, 22), "Femorali": (8, 16), "Glutei": (10, 18),
                          "Polpacci": (8, 18)}
         }
@@ -341,9 +341,350 @@ class Model:
 
         return TrainingWeek(numero_settimana=settimana_numero, start_date=oggi, workout_days=days)
 
-    def getSchedaFullBodyIntermedio(self, context, muscolo_target):
-        """Metodo per generare schede Full Body per atleti intermedi (3 giorni)."""
-        return self._crea_fullbody_intermedio(context, muscolo_target, giorni=3)
+    def _distribuisci_serie_due_giorni(self, volume_totale):
+        """
+        Distribuisce le serie totali su 2 giorni per atleti intermedi (4 giorni totali).
+        Ogni muscolo viene allenato esattamente 2 volte.
+        """
+        if volume_totale <= 0:
+            return [0, 0]
+
+        if volume_totale <= 2:
+            # 2 serie = 1-1
+            return [1, 1]
+        elif volume_totale <= 4:
+            # 3-4 serie = distribuzione più equilibrata possibile
+            base = volume_totale // 2
+            extra = volume_totale % 2
+            return [base + extra, base]
+        else:
+            # 5+ serie = distribuzione equilibrata
+            base = volume_totale // 2
+            extra = volume_totale % 2
+            return [base + extra, base]
+
+    def _crea_fullbody_intermedio_4giorni(self, context, muscolo_target):
+        """Crea una settimana di allenamento Full Body per atleti intermedi a 4 giorni."""
+
+        MIN_DIRECT_SETS = 6
+        settimana_numero = 1
+        oggi = datetime.now()
+
+        # Definisci i gruppi muscolari per ogni tipo di giorno
+        muscoli_giorni_1_3 = ["Spalle", "Petto", "Schiena", "Polpacci"]  # Giorni 1 e 3
+        muscoli_giorni_2_4 = ["Quadricipiti", "Glutei", "Femorali", "Bicipiti", "Tricipiti"]  # Giorni 2 e 4
+
+        # Crea i 4 giorni di allenamento
+        days = [WorkoutDay(id_giorno=i + 1, settimana=settimana_numero, split_type="Full Body 4 Days", data=oggi) for i
+                in range(4)]
+
+        esercizi_map_globale = {}
+        esercizi_scelti = {}
+
+        # Definisci le gerarchie per i due tipi di giorno
+        def _get_muscle_order_day_1_3(muscolo_target):
+            """Ordine per giorni 1 e 3: target first, poi petto pesante, schiena pesante, petto leggero, schiena leggero, spalle, polpacci"""
+            base_order = ["Petto", "Schiena", "Spalle", "Polpacci"]
+            if muscolo_target in base_order:
+                # Metti il target per primo
+                ordered = [muscolo_target]
+                for muscle in base_order:
+                    if muscle != muscolo_target:
+                        ordered.append(muscle)
+                return ordered
+            return base_order
+
+        def _get_muscle_order_day_2_4(muscolo_target):
+            """Ordine per giorni 2 e 4: target first, poi quadricipiti, glutei, femorali, bicipiti, tricipiti"""
+            base_order = ["Quadricipiti", "Glutei", "Femorali", "Bicipiti", "Tricipiti"]
+            if muscolo_target in base_order:
+                # Metti il target per primo
+                ordered = [muscolo_target]
+                for muscle in base_order:
+                    if muscle != muscolo_target:
+                        ordered.append(muscle)
+                return ordered
+            return base_order
+
+        # Determina in quale gruppo appartiene il muscolo target
+        if muscolo_target in muscoli_giorni_1_3:
+            muscoli_da_processare = muscoli_giorni_1_3
+            ordered_muscles = _get_muscle_order_day_1_3(muscolo_target)
+            giorni_target = [0, 2]  # Giorni 1 e 3 (indici 0 e 2)
+        else:
+            muscoli_da_processare = muscoli_giorni_2_4
+            ordered_muscles = _get_muscle_order_day_2_4(muscolo_target)
+            giorni_target = [1, 3]  # Giorni 2 e 4 (indici 1 e 3)
+
+        # Processa anche l'altro gruppo di muscoli
+        if muscolo_target in muscoli_giorni_1_3:
+            altri_muscoli = muscoli_giorni_2_4
+            ordered_altri_muscoli = _get_muscle_order_day_2_4(muscolo_target)
+            giorni_altri = [1, 3]  # Giorni 2 e 4
+        else:
+            altri_muscoli = muscoli_giorni_1_3
+            ordered_altri_muscoli = _get_muscle_order_day_1_3(muscolo_target)
+            giorni_altri = [0, 2]  # Giorni 1 e 3
+
+        # Struttura per memorizzare esercizi: {giorno_index: [(esercizio, serie, reps, ordine_muscolo)]}
+        esercizi_per_giorno = {i: [] for i in range(4)}
+
+        # Processa prima il gruppo del muscolo target
+        for ordine_muscolo, muscolo in enumerate(ordered_muscles):
+            self._processa_muscolo_4giorni(context, muscolo, muscolo_target, ordine_muscolo, giorni_target,
+                                           esercizi_per_giorno, esercizi_scelti, esercizi_map_globale,
+                                           MIN_DIRECT_SETS, settimana_numero)
+
+        # Processa l'altro gruppo di muscoli
+        for ordine_muscolo, muscolo in enumerate(ordered_altri_muscoli):
+            self._processa_muscolo_4giorni(context, muscolo, muscolo_target, ordine_muscolo + len(ordered_muscles),
+                                           giorni_altri, esercizi_per_giorno, esercizi_scelti, esercizi_map_globale,
+                                           MIN_DIRECT_SETS, settimana_numero)
+
+        # Aggiungi gli esercizi ai giorni rispettando l'ordine specifico
+        for i in range(4):
+            if i in [0, 2]:  # Giorni 1 e 3
+                self._aggiungi_esercizi_giorni_1_3(days[i], esercizi_per_giorno[i], muscolo_target)
+            else:  # Giorni 2 e 4
+                self._aggiungi_esercizi_giorni_2_4(days[i], esercizi_per_giorno[i], muscolo_target)
+
+        return TrainingWeek(numero_settimana=settimana_numero, start_date=oggi, workout_days=days)
+
+    def _processa_muscolo_4giorni(self, context, muscolo, muscolo_target, ordine_muscolo, giorni_target,
+                                  esercizi_per_giorno, esercizi_scelti, esercizi_map_globale,
+                                  MIN_DIRECT_SETS, settimana_numero):
+        """Processa un singolo muscolo per l'allenamento a 4 giorni."""
+
+        print(f"Processing: {muscolo}")
+
+        # Calcola volume base per intermedio
+        volume_base = self.get_weekly_sets("intermedio", muscolo, settimana_numero)
+
+        # Se è il muscolo target, aggiungi 30% di volume
+        if muscolo == muscolo_target:
+            volume_totale_target = int(round(volume_base * 1.3))
+            print(f"  - Target muscle detected! Base: {volume_base}, With 30% bonus: {volume_totale_target}")
+        else:
+            volume_totale_target = volume_base
+
+        print(f"  - Target volume: {volume_totale_target}")
+
+        volume_indiretto_accumulato = self._calcola_coinvolgimento_indiretto(esercizi_scelti, [muscolo])[muscolo]
+        print(f"  - Indirect volume from other exercises: {volume_indiretto_accumulato:.1f}")
+
+        # Calcola le serie effettive (dirette + indirette)
+        serie_effettive_attuali = volume_indiretto_accumulato
+        volume_mancante = volume_totale_target - serie_effettive_attuali
+
+        # Vincolo: almeno 6 serie dirette per ogni muscolo
+        volume_diretto_da_aggiungere = max(MIN_DIRECT_SETS, volume_mancante)
+        volume_effettivo = max(0, int(round(volume_diretto_da_aggiungere)))
+
+        print(f"  - Current effective sets: {serie_effettive_attuali:.1f}")
+        print(f"  - Missing volume: {volume_mancante:.1f}")
+        print(f"  - Direct sets to add (min {MIN_DIRECT_SETS}): {volume_effettivo}")
+
+        if volume_effettivo <= 0:
+            print(f"  - Skipping direct work for {muscolo}, target met.")
+            return
+
+        # Prendi i primi due esercizi dalla lista ordinata per priorità
+        esercizi_disponibili = DAO.getEsercizi(context, muscolo)
+        if not esercizi_disponibili:
+            print(f"  - No exercises found for {muscolo}.")
+            return
+
+        # Prendi i primi due esercizi
+        if len(esercizi_disponibili) >= 2:
+            primo_esercizio = esercizi_disponibili[0]
+            secondo_esercizio = esercizi_disponibili[1]
+        else:
+            primo_esercizio = esercizi_disponibili[0]
+            secondo_esercizio = esercizi_disponibili[0]
+
+        print(f"  - Selected exercises: {primo_esercizio.nome} and {secondo_esercizio.nome}")
+
+        # Determina quale è "pesante" e quale è "leggero"
+        range_primo = self._parse_rep_range(primo_esercizio.range_ripetizioni)
+        range_secondo = self._parse_rep_range(secondo_esercizio.range_ripetizioni)
+
+        if range_primo[0] < range_secondo[0]:
+            e_heavy = primo_esercizio
+            e_light = secondo_esercizio
+        elif range_primo[0] > range_secondo[0]:
+            e_heavy = secondo_esercizio
+            e_light = primo_esercizio
+        else:
+            e_heavy = primo_esercizio
+            e_light = secondo_esercizio
+
+        print(f"  - Heavy exercise: {e_heavy.nome} (range: {e_heavy.range_ripetizioni})")
+        print(f"  - Light exercise: {e_light.nome} (range: {e_light.range_ripetizioni})")
+
+        esercizi_map_globale[e_heavy.id] = e_heavy
+        esercizi_map_globale[e_light.id] = e_light
+
+        # Distribuzione: 50% pesante (6-8), 40% medio (12-14), 10% leggero (20-22)
+        tot_pesante, tot_medio, tot_leggero = self._calcola_distribuzione_rep_range(volume_effettivo)
+        print(
+            f"  - Sets distribution: Heavy(6-8): {tot_pesante}, Medium(12-14): {tot_medio}, Light(20-22): {tot_leggero}")
+
+        # Aggiorna il conteggio degli esercizi scelti
+        esercizi_scelti[e_heavy] = esercizi_scelti.get(e_heavy, 0) + tot_pesante
+        esercizi_scelti[e_light] = esercizi_scelti.get(e_light, 0) + tot_medio + tot_leggero
+
+        # Distribuisci le serie sui 2 giorni (ogni esercizio viene ripetuto 2 volte)
+        distribuzione_heavy = self._distribuisci_serie_due_giorni(tot_pesante)
+        distribuzione_light = self._distribuisci_serie_due_giorni(tot_medio + tot_leggero)
+
+        print(f"  - Heavy distribution across 2 days: {distribuzione_heavy}")
+        print(f"  - Light distribution across 2 days: {distribuzione_light}")
+
+        # Assegna gli esercizi ai giorni target
+        for i, giorno_idx in enumerate(giorni_target):
+            if distribuzione_heavy[i] > 0:
+                esercizi_per_giorno[giorno_idx].append((e_heavy, distribuzione_heavy[i],
+                                                        ["6-8"] * distribuzione_heavy[i], ordine_muscolo))
+            if distribuzione_light[i] > 0:
+                reps_light_disponibili = ["12-14"] * tot_medio + ["20-22"] * tot_leggero
+                # Distribuisci le ripetizioni tra i due giorni
+                if i == 0:  # Primo giorno
+                    reps_da_assegnare = reps_light_disponibili[:distribuzione_light[i]]
+                else:  # Secondo giorno
+                    reps_da_assegnare = reps_light_disponibili[distribuzione_light[0]:]
+
+                if reps_da_assegnare:
+                    esercizi_per_giorno[giorno_idx].append((e_light, distribuzione_light[i],
+                                                            reps_da_assegnare, ordine_muscolo))
+
+    def _aggiungi_esercizi_giorni_1_3(self, day, esercizi_giorno, muscolo_target):
+        """Aggiungi esercizi ai giorni 1 e 3 con ordine specifico: target first, poi petto pesante, schiena pesante, petto leggero, schiena leggero, spalle, polpacci"""
+
+        # Raggruppa esercizi per muscolo e tipo
+        esercizi_per_muscolo = {}
+        for esercizio, serie, reps, ordine_muscolo in esercizi_giorno:
+            muscolo = esercizio.muscolo_primario
+            if muscolo not in esercizi_per_muscolo:
+                esercizi_per_muscolo[muscolo] = {'heavy': [], 'light': []}
+
+            # Determina se è pesante o leggero dal range di ripetizioni
+            if "6-8" in reps:
+                esercizi_per_muscolo[muscolo]['heavy'].append((esercizio, serie, reps, ordine_muscolo))
+            else:
+                esercizi_per_muscolo[muscolo]['light'].append((esercizio, serie, reps, ordine_muscolo))
+
+        # Ordine specifico: target first, poi petto pesante, schiena pesante, petto leggero, schiena leggero, spalle, polpacci
+        order = []
+
+        # Prima il muscolo target (se presente)
+        if muscolo_target in esercizi_per_muscolo:
+            for ex in esercizi_per_muscolo[muscolo_target]['heavy']:
+                order.append(ex)
+            for ex in esercizi_per_muscolo[muscolo_target]['light']:
+                order.append(ex)
+
+        # Poi petto pesante
+        if "Petto" in esercizi_per_muscolo and muscolo_target != "Petto":
+            for ex in esercizi_per_muscolo["Petto"]['heavy']:
+                order.append(ex)
+
+        # Poi schiena pesante
+        if "Schiena" in esercizi_per_muscolo and muscolo_target != "Schiena":
+            for ex in esercizi_per_muscolo["Schiena"]['heavy']:
+                order.append(ex)
+
+        # Poi petto leggero
+        if "Petto" in esercizi_per_muscolo and muscolo_target != "Petto":
+            for ex in esercizi_per_muscolo["Petto"]['light']:
+                order.append(ex)
+
+        # Poi schiena leggero
+        if "Schiena" in esercizi_per_muscolo and muscolo_target != "Schiena":
+            for ex in esercizi_per_muscolo["Schiena"]['light']:
+                order.append(ex)
+
+        # Poi spalle
+        if "Spalle" in esercizi_per_muscolo and muscolo_target != "Spalle":
+            for ex in esercizi_per_muscolo["Spalle"]['heavy']:
+                order.append(ex)
+            for ex in esercizi_per_muscolo["Spalle"]['light']:
+                order.append(ex)
+
+        # Infine polpacci
+        if "Polpacci" in esercizi_per_muscolo and muscolo_target != "Polpacci":
+            for ex in esercizi_per_muscolo["Polpacci"]['heavy']:
+                order.append(ex)
+            for ex in esercizi_per_muscolo["Polpacci"]['light']:
+                order.append(ex)
+
+        # Aggiungi al giorno
+        for esercizio, serie, reps, ordine_muscolo in order:
+            day.aggiungi_esercizio(esercizio, serie, reps, ordine_muscolo)
+
+    def _aggiungi_esercizi_giorni_2_4(self, day, esercizi_giorno, muscolo_target):
+        """Aggiungi esercizi ai giorni 2 e 4 con ordine specifico: target first, poi quadricipiti pesante, poi tutto il resto, infine bicipiti e tricipiti"""
+
+        # Raggruppa esercizi per muscolo e tipo
+        esercizi_per_muscolo = {}
+        for esercizio, serie, reps, ordine_muscolo in esercizi_giorno:
+            muscolo = esercizio.muscolo_primario
+            if muscolo not in esercizi_per_muscolo:
+                esercizi_per_muscolo[muscolo] = {'heavy': [], 'light': []}
+
+            # Determina se è pesante o leggero dal range di ripetizioni
+            if "6-8" in reps:
+                esercizi_per_muscolo[muscolo]['heavy'].append((esercizio, serie, reps, ordine_muscolo))
+            else:
+                esercizi_per_muscolo[muscolo]['light'].append((esercizio, serie, reps, ordine_muscolo))
+
+        # Ordine specifico: target first, poi quadricipiti pesante, poi tutto il resto, infine bicipiti e tricipiti
+        order = []
+
+        # Prima il muscolo target (se presente)
+        if muscolo_target in esercizi_per_muscolo:
+            for ex in esercizi_per_muscolo[muscolo_target]['heavy']:
+                order.append(ex)
+            for ex in esercizi_per_muscolo[muscolo_target]['light']:
+                order.append(ex)
+
+        # Poi quadricipiti pesante
+        if "Quadricipiti" in esercizi_per_muscolo and muscolo_target != "Quadricipiti":
+            for ex in esercizi_per_muscolo["Quadricipiti"]['heavy']:
+                order.append(ex)
+
+        # Poi glutei e femorali
+        for muscolo in ["Glutei", "Femorali"]:
+            if muscolo in esercizi_per_muscolo and muscolo_target != muscolo:
+                for ex in esercizi_per_muscolo[muscolo]['heavy']:
+                    order.append(ex)
+                for ex in esercizi_per_muscolo[muscolo]['light']:
+                    order.append(ex)
+
+        # Poi quadricipiti leggero
+        if "Quadricipiti" in esercizi_per_muscolo and muscolo_target != "Quadricipiti":
+            for ex in esercizi_per_muscolo["Quadricipiti"]['light']:
+                order.append(ex)
+
+        # Infine bicipiti e tricipiti
+        for muscolo in ["Bicipiti", "Tricipiti"]:
+            if muscolo in esercizi_per_muscolo and muscolo_target != muscolo:
+                for ex in esercizi_per_muscolo[muscolo]['heavy']:
+                    order.append(ex)
+                for ex in esercizi_per_muscolo[muscolo]['light']:
+                    order.append(ex)
+
+        # Aggiungi al giorno
+        for esercizio, serie, reps, ordine_muscolo in order:
+            day.aggiungi_esercizio(esercizio, serie, reps, ordine_muscolo)
+
+    def getSchedaFullBodyIntermedio(self, context, muscolo_target, giorni=3):
+        """Metodo per generare schede Full Body per atleti intermedi (3 o 4 giorni)."""
+        if giorni == 3:
+            return self._crea_fullbody_intermedio(context, muscolo_target, giorni=3)
+        elif giorni == 4:
+            return self._crea_fullbody_intermedio_4giorni(context, muscolo_target)
+        else:
+            raise ValueError("Per intermedi sono supportati solo 3 o 4 giorni di allenamento.")
 
     def getSchedaFullBody(self, context, muscolo_target, giorni):
         """Metodo unificato per generare schede Full Body (mantenuto per compatibilità)."""
@@ -358,10 +699,14 @@ class Model:
 if __name__ == "__main__":
     model = Model()
 
-    print("********** GENERAZIONE SCHEDA FULL BODY INTERMEDIO - FOCUS PETTO **********\n")
-    scheda_intermedio = model.getSchedaFullBodyIntermedio("Palestra Completa", "Petto")
-    print(scheda_intermedio)
+    print("********** GENERAZIONE SCHEDA FULL BODY INTERMEDIO 3 GIORNI - FOCUS PETTO **********\n")
+    scheda_intermedio_3 = model.getSchedaFullBodyIntermedio("Palestra Completa", "Petto", giorni=3)
+    print(scheda_intermedio_3)
 
-    print("\n\n********** GENERAZIONE SCHEDA FULL BODY INTERMEDIO - FOCUS SPALLE **********\n")
-    scheda_intermedio_spalle = model.getSchedaFullBodyIntermedio("Palestra Completa", "Spalle")
-    print(scheda_intermedio_spalle)
+    print("\n\n********** GENERAZIONE SCHEDA FULL BODY INTERMEDIO 4 GIORNI - FOCUS SPALLE **********\n")
+    scheda_intermedio_4 = model.getSchedaFullBodyIntermedio("Palestra Completa", "Spalle", giorni=4)
+    print(scheda_intermedio_4)
+
+    print("\n\n********** GENERAZIONE SCHEDA FULL BODY INTERMEDIO 4 GIORNI - FOCUS QUADRICIPITI **********\n")
+    scheda_intermedio_4_quad = model.getSchedaFullBodyIntermedio("Palestra Completa", "Quadricipiti", giorni=4)
+    print(scheda_intermedio_4_quad)
