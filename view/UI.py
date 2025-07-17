@@ -1,10 +1,8 @@
 import flet as ft
-from typing import Dict, List, Optional
-import json
-from datetime import datetime
+from typing import Dict
 
 # Importa le tue classi esistenti
-from model.adattaScheda import TrainingAlgorithm, PerformanceData, DOMSData
+from adattaScheda import TrainingAlgorithm, PerformanceData, DOMSData
 
 
 class TrainingGUI:
