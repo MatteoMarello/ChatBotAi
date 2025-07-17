@@ -208,7 +208,7 @@ class Model:
         except:
             return (0, 0)  # Default if parsing fails
 
-    def _crea_fullbody_intermedio(self, context, muscolo_target, giorni=3):
+    def _crea_fullbody_intermedio(self, context, muscolo_target, giorni=3, volume_overrides=None):
         """Crea una settimana di allenamento Full Body per atleti intermedi."""
 
         MIN_DIRECT_SETS = 6  # Cambiato da 4 a 6 per intermedi
@@ -231,15 +231,22 @@ class Model:
         for ordine_muscolo, muscolo in enumerate(ordered_muscles):
             print(f"Processing: {muscolo}")
 
-            # Calcola volume base per intermedio
-            volume_base = self.get_weekly_sets("intermedio", muscolo, settimana_numero)
-
-            # Se è il muscolo target, aggiungi 30% di volume
-            if muscolo == muscolo_target:
-                volume_totale_target = int(round(volume_base * 1.3))
-                print(f"  - Target muscle detected! Base: {volume_base}, With 30% bonus: {volume_totale_target}")
+            # *** INIZIO MODIFICA: Gestione volume_overrides ***
+            if volume_overrides and muscolo in volume_overrides:
+                volume_totale_target = volume_overrides[muscolo]
+                print(
+                    f"  - Volume OVERRIDDEN to {volume_totale_target} (original: {self.get_weekly_sets('intermedio', muscolo, settimana_numero)})")
             else:
-                volume_totale_target = volume_base
+                # Calcolo normale del volume
+                volume_base = self.get_weekly_sets("intermedio", muscolo, settimana_numero)
+
+                # Se è il muscolo target, aggiungi 30% di volume
+                if muscolo == muscolo_target:
+                    volume_totale_target = int(round(volume_base * 1.3))
+                    print(f"  - Target muscle detected! Base: {volume_base}, With 30% bonus: {volume_totale_target}")
+                else:
+                    volume_totale_target = volume_base
+            # *** FINE MODIFICA ***
 
             print(f"  - Target volume: {volume_totale_target}")
 
@@ -363,7 +370,7 @@ class Model:
             extra = volume_totale % 2
             return [base + extra, base]
 
-    def _crea_fullbody_intermedio_4giorni(self, context, muscolo_target):
+    def _crea_fullbody_intermedio_4giorni(self, context, muscolo_target, volume_overrides=None):
         """Crea una settimana di allenamento Full Body per atleti intermedi a 4 giorni."""
 
         MIN_DIRECT_SETS = 6
@@ -433,13 +440,13 @@ class Model:
         for ordine_muscolo, muscolo in enumerate(ordered_muscles):
             self._processa_muscolo_4giorni(context, muscolo, muscolo_target, ordine_muscolo, giorni_target,
                                            esercizi_per_giorno, esercizi_scelti, esercizi_map_globale,
-                                           MIN_DIRECT_SETS, settimana_numero)
+                                           MIN_DIRECT_SETS, settimana_numero, volume_overrides)
 
         # Processa l'altro gruppo di muscoli
         for ordine_muscolo, muscolo in enumerate(ordered_altri_muscoli):
             self._processa_muscolo_4giorni(context, muscolo, muscolo_target, ordine_muscolo + len(ordered_muscles),
                                            giorni_altri, esercizi_per_giorno, esercizi_scelti, esercizi_map_globale,
-                                           MIN_DIRECT_SETS, settimana_numero)
+                                           MIN_DIRECT_SETS, settimana_numero, volume_overrides)
 
         # Aggiungi gli esercizi ai giorni rispettando l'ordine specifico
         for i in range(4):
@@ -452,20 +459,27 @@ class Model:
 
     def _processa_muscolo_4giorni(self, context, muscolo, muscolo_target, ordine_muscolo, giorni_target,
                                   esercizi_per_giorno, esercizi_scelti, esercizi_map_globale,
-                                  MIN_DIRECT_SETS, settimana_numero):
+                                  MIN_DIRECT_SETS, settimana_numero, volume_overrides=None):
         """Processa un singolo muscolo per l'allenamento a 4 giorni."""
 
         print(f"Processing: {muscolo}")
 
-        # Calcola volume base per intermedio
-        volume_base = self.get_weekly_sets("intermedio", muscolo, settimana_numero)
-
-        # Se è il muscolo target, aggiungi 30% di volume
-        if muscolo == muscolo_target:
-            volume_totale_target = int(round(volume_base * 1.3))
-            print(f"  - Target muscle detected! Base: {volume_base}, With 30% bonus: {volume_totale_target}")
+        # *** INIZIO MODIFICA: Gestione volume_overrides ***
+        if volume_overrides and muscolo in volume_overrides:
+            volume_totale_target = volume_overrides[muscolo]
+            print(
+                f"  - Volume OVERRIDDEN to {volume_totale_target} (original: {self.get_weekly_sets('intermedio', muscolo, settimana_numero)})")
         else:
-            volume_totale_target = volume_base
+            # Calcolo normale del volume
+            volume_base = self.get_weekly_sets("intermedio", muscolo, settimana_numero)
+
+            # Se è il muscolo target, aggiungi 30% di volume
+            if muscolo == muscolo_target:
+                volume_totale_target = int(round(volume_base * 1.3))
+                print(f"  - Target muscle detected! Base: {volume_base}, With 30% bonus: {volume_totale_target}")
+            else:
+                volume_totale_target = volume_base
+        # *** FINE MODIFICA ***
 
         print(f"  - Target volume: {volume_totale_target}")
 
@@ -677,20 +691,20 @@ class Model:
         for esercizio, serie, reps, ordine_muscolo in order:
             day.aggiungi_esercizio(esercizio, serie, reps, ordine_muscolo)
 
-    def getSchedaFullBodyIntermedio(self, context, muscolo_target, giorni=3):
+    def getSchedaFullBodyIntermedio(self, context, muscolo_target, giorni=3, volume_overrides=None):
         """Metodo per generare schede Full Body per atleti intermedi (3 o 4 giorni)."""
         if giorni == 3:
-            return self._crea_fullbody_intermedio(context, muscolo_target, giorni=3)
+            return self._crea_fullbody_intermedio(context, muscolo_target, giorni=3, volume_overrides=volume_overrides)
         elif giorni == 4:
-            return self._crea_fullbody_intermedio_4giorni(context, muscolo_target)
+            return self._crea_fullbody_intermedio_4giorni(context, muscolo_target, volume_overrides=volume_overrides)
         else:
             raise ValueError("Per intermedi sono supportati solo 3 o 4 giorni di allenamento.")
 
-    def getSchedaFullBody(self, context, muscolo_target, giorni):
+    def getSchedaFullBody(self, context, muscolo_target, giorni, volume_overrides=None):
         """Metodo unificato per generare schede Full Body (mantenuto per compatibilità)."""
         if giorni not in [2, 3]:
             raise ValueError("La frequenza per Full Body deve essere 2 o 3.")
-        return self._crea_fullbody_giorni(context, muscolo_target, giorni)
+        return self._crea_fullbody_giorni(context, muscolo_target, giorni, volume_overrides=volume_overrides)
 
 
 # ===============================================================
@@ -710,3 +724,9 @@ if __name__ == "__main__":
     print("\n\n********** GENERAZIONE SCHEDA FULL BODY INTERMEDIO 4 GIORNI - FOCUS QUADRICIPITI **********\n")
     scheda_intermedio_4_quad = model.getSchedaFullBodyIntermedio("Palestra Completa", "Quadricipiti", giorni=4)
     print(scheda_intermedio_4_quad)
+
+    print("\n\n********** TEST CON VOLUME OVERRIDES **********\n")
+    volume_overrides = {"Petto": 15, "Schiena": 18, "Spalle": 12}
+    scheda_con_override = model.getSchedaFullBodyIntermedio("Palestra Completa", "Petto", giorni=3,
+                                                            volume_overrides=volume_overrides)
+    print(scheda_con_override)
