@@ -208,11 +208,10 @@ class Model:
         except:
             return (0, 0)  # Default if parsing fails
 
-    def _crea_fullbody_intermedio(self, context, muscolo_target, giorni=3, volume_overrides=None):
-        """Crea una settimana di allenamento Full Body per atleti intermedi."""
+    def _crea_fullbody_intermedio(self, context, muscolo_target, giorni=3, volume_overrides=None, settimana=1):
+        MIN_DIRECT_SETS = 6
+        settimana_numero = settimana
 
-        MIN_DIRECT_SETS = 6  # Cambiato da 4 a 6 per intermedi
-        settimana_numero = 1
         oggi = datetime.now()
         days = [WorkoutDay(id_giorno=i + 1, settimana=settimana_numero, split_type="Full Body", data=oggi) for i in
                 range(giorni)]
@@ -231,43 +230,42 @@ class Model:
         for ordine_muscolo, muscolo in enumerate(ordered_muscles):
             print(f"Processing: {muscolo}")
 
-            # *** INIZIO MODIFICA: Gestione volume_overrides ***
+            # --- INIZIO MODIFICA ---
+            # Se esiste un override, quel valore diventa il numero esatto di serie dirette (volume_effettivo),
+            # saltando tutti gli altri calcoli di volume.
             if volume_overrides and muscolo in volume_overrides:
-                volume_totale_target = volume_overrides[muscolo]
-                print(
-                    f"  - Volume OVERRIDDEN to {volume_totale_target} (original: {self.get_weekly_sets('intermedio', muscolo, settimana_numero)})")
+                volume_effettivo = volume_overrides[muscolo]
+                print(f"  - Volume OVERRIDDEN to {volume_effettivo} DIRECT sets")
             else:
-                # Calcolo normale del volume
+                # Se non ci sono override, si usa la logica standard
                 volume_base = self.get_weekly_sets("intermedio", muscolo, settimana_numero)
 
-                # Se è il muscolo target, aggiungi 30% di volume
                 if muscolo == muscolo_target:
                     volume_totale_target = int(round(volume_base * 1.3))
                     print(f"  - Target muscle detected! Base: {volume_base}, With 30% bonus: {volume_totale_target}")
                 else:
                     volume_totale_target = volume_base
-            # *** FINE MODIFICA ***
 
-            print(f"  - Target volume: {volume_totale_target}")
+                print(f"  - Target volume: {volume_totale_target}")
 
-            volume_indiretto_accumulato = self._calcola_coinvolgimento_indiretto(esercizi_scelti, [muscolo])[muscolo]
-            print(f"  - Indirect volume from other exercises: {volume_indiretto_accumulato:.1f}")
+                volume_indiretto_accumulato = self._calcola_coinvolgimento_indiretto(esercizi_scelti, [muscolo])[muscolo]
+                print(f"  - Indirect volume from other exercises: {volume_indiretto_accumulato:.1f}")
 
-            # Calcola le serie effettive (dirette + indirette)
-            serie_effettive_attuali = volume_indiretto_accumulato
-            volume_mancante = volume_totale_target - serie_effettive_attuali
+                serie_effettive_attuali = volume_indiretto_accumulato
+                volume_mancante = volume_totale_target - serie_effettive_attuali
 
-            # Vincolo: almeno 6 serie dirette per ogni muscolo
-            volume_diretto_da_aggiungere = max(MIN_DIRECT_SETS, volume_mancante)
-            volume_effettivo = max(0, int(round(volume_diretto_da_aggiungere)))
+                volume_diretto_da_aggiungere = max(MIN_DIRECT_SETS, volume_mancante)
+                volume_effettivo = max(0, int(round(volume_diretto_da_aggiungere)))
 
-            print(f"  - Current effective sets: {serie_effettive_attuali:.1f}")
-            print(f"  - Missing volume: {volume_mancante:.1f}")
-            print(f"  - Direct sets to add (min {MIN_DIRECT_SETS}): {volume_effettivo}")
+                print(f"  - Current effective sets: {serie_effettive_attuali:.1f}")
+                print(f"  - Missing volume: {volume_mancante:.1f}")
+                print(f"  - Direct sets to add: {volume_effettivo}")
+            # --- FINE MODIFICA ---
 
             if volume_effettivo <= 0:
                 print(f"  - Skipping direct work for {muscolo}, target met.")
                 continue
+
 
             # Prendi i primi due esercizi dalla lista ordinata per priorità
             esercizi_disponibili = DAO.getEsercizi(context, muscolo)
@@ -370,11 +368,11 @@ class Model:
             extra = volume_totale % 2
             return [base + extra, base]
 
-    def _crea_fullbody_intermedio_4giorni(self, context, muscolo_target, volume_overrides=None):
+    def _crea_fullbody_intermedio_4giorni(self, context, muscolo_target, volume_overrides=None, settimana=1):
         """Crea una settimana di allenamento Full Body per atleti intermedi a 4 giorni."""
 
         MIN_DIRECT_SETS = 6
-        settimana_numero = 1
+        settimana_numero = settimana
         oggi = datetime.now()
 
         # Definisci i gruppi muscolari per ogni tipo di giorno
@@ -691,14 +689,25 @@ class Model:
         for esercizio, serie, reps, ordine_muscolo in order:
             day.aggiungi_esercizio(esercizio, serie, reps, ordine_muscolo)
 
-    def getSchedaFullBodyIntermedio(self, context, muscolo_target, giorni=3, volume_overrides=None):
+
+    def getSchedaFullBodyIntermedio(self, context, muscolo_target, giorni=3, volume_overrides=None, settimana=1):
         """Metodo per generare schede Full Body per atleti intermedi (3 o 4 giorni)."""
         if giorni == 3:
-            return self._crea_fullbody_intermedio(context, muscolo_target, giorni=3, volume_overrides=volume_overrides)
+            return self._crea_fullbody_intermedio(context, muscolo_target, giorni=3, volume_overrides=volume_overrides,
+                                                  settimana=settimana)
         elif giorni == 4:
-            return self._crea_fullbody_intermedio_4giorni(context, muscolo_target, volume_overrides=volume_overrides)
+            # Assicurati di modificare anche _crea_fullbody_intermedio_4giorni per accettare e usare 'settimana'
+            return self._crea_fullbody_intermedio_4giorni(context, muscolo_target, volume_overrides=volume_overrides,
+                                                          settimana=settimana)
         else:
             raise ValueError("Per intermedi sono supportati solo 3 o 4 giorni di allenamento.")
+
+    # Fai lo stesso per getSchedaFullBodyPrincipiante
+    def getSchedaFullBodyPrincipiante(self, context, muscolo_target, giorni=3, volume_overrides=None, settimana=1):
+        if giorni not in [2, 3]:
+            raise ValueError("Per principianti sono supportati solo 2 o 3 giorni di allenamento.")
+        return self._crea_fullbody_principiante(context, muscolo_target, giorni=giorni,
+                                                volume_overrides=volume_overrides, settimana=settimana)
 
     def getSchedaFullBody(self, context, muscolo_target, giorni, volume_overrides=None):
         """Metodo unificato per generare schede Full Body (mantenuto per compatibilità)."""
@@ -706,7 +715,114 @@ class Model:
             raise ValueError("La frequenza per Full Body deve essere 2 o 3.")
         return self._crea_fullbody_giorni(context, muscolo_target, giorni, volume_overrides=volume_overrides)
 
+    def _distribuisci_serie_giorni_principiante(self, volume_totale, giorni=3):
+        """
+        Distribuisce le serie per principianti. Tende a usare 2 giorni se il volume è basso
+        per non disperdere troppo lo stimolo, altrimenti distribuisce equamente.
+        """
+        if volume_totale <= 0:
+            return [0] * giorni
 
+        # Se il volume è basso (<= 5 serie), meglio concentrarlo su 2 giorni
+        giorni_da_usare = 2 if volume_totale <= 5 and giorni >= 2 else giorni
+
+        # Se il volume è molto basso, usa un solo giorno
+        if volume_totale <= 2:
+            giorni_da_usare = 1
+
+        serie_per_giorno = [0] * giorni
+        giorni_attivi_idx = random.sample(range(giorni), giorni_da_usare)
+
+        base = volume_totale // giorni_da_usare
+        extra = volume_totale % giorni_da_usare
+
+        for i in range(giorni_da_usare):
+            idx = giorni_attivi_idx[i]
+            serie_per_giorno[idx] = base + (1 if i < extra else 0)
+
+        return serie_per_giorno
+
+    def _crea_fullbody_principiante(self, context, muscolo_target, giorni=3, volume_overrides=None):
+        """Crea una settimana di allenamento Full Body per atleti principianti."""
+        MIN_DIRECT_SETS = 4  # Meno volume diretto richiesto per i principianti
+        settimana_numero = 1
+        oggi = datetime.now()
+        days = [WorkoutDay(id_giorno=i + 1, settimana=settimana_numero, split_type="Full Body", data=oggi) for i in
+                range(giorni)]
+
+        esercizi_map_globale = {}
+        esercizi_scelti = {}
+        muscoli_da_allenare = self.split_muscoli["Full Body"]
+        ordered_muscles = self._ordina_muscoli_fullbody(muscoli_da_allenare, muscolo_target)
+        esercizi_per_giorno = {i: [] for i in range(giorni)}
+
+        for ordine_muscolo, muscolo in enumerate(ordered_muscles):
+            if volume_overrides and muscolo in volume_overrides:
+                volume_totale_target = volume_overrides[muscolo]
+            else:
+                volume_base = self.get_weekly_sets("principiante", muscolo, settimana_numero)
+                if muscolo == muscolo_target:
+                    volume_totale_target = int(round(volume_base * 1.2))  # Bonus 20% per principianti
+                else:
+                    volume_totale_target = volume_base
+
+            volume_indiretto_accumulato = self._calcola_coinvolgimento_indiretto(esercizi_scelti, [muscolo])[muscolo]
+            volume_mancante = volume_totale_target - volume_indiretto_accumulato
+            volume_diretto_da_aggiungere = max(MIN_DIRECT_SETS, volume_mancante)
+            # --- FINE MODIFICA ---
+            volume_effettivo = max(0, int(round(volume_diretto_da_aggiungere)))
+
+            if volume_effettivo <= 0:
+                continue
+
+            esercizi_disponibili = DAO.getEsercizi(context, muscolo)
+            if not esercizi_disponibili:
+                continue
+
+            primo_esercizio = esercizi_disponibili[0]
+            secondo_esercizio = esercizi_disponibili[1] if len(esercizi_disponibili) >= 2 else primo_esercizio
+
+            range_primo = self._parse_rep_range(primo_esercizio.range_ripetizioni)
+            range_secondo = self._parse_rep_range(secondo_esercizio.range_ripetizioni)
+
+            e_heavy, e_light = (primo_esercizio, secondo_esercizio) if range_primo[0] <= range_secondo[0] else (
+            secondo_esercizio, primo_esercizio)
+
+            esercizi_map_globale[e_heavy.id] = e_heavy
+            esercizi_map_globale[e_light.id] = e_light
+
+            tot_pesante, tot_medio, tot_leggero = self._calcola_distribuzione_rep_range(volume_effettivo)
+            esercizi_scelti[e_heavy] = esercizi_scelti.get(e_heavy, 0) + tot_pesante
+            esercizi_scelti[e_light] = esercizi_scelti.get(e_light, 0) + tot_medio + tot_leggero
+
+            distribuzione_giorni_heavy = self._distribuisci_serie_giorni_principiante(tot_pesante, giorni)
+            distribuzione_giorni_light = self._distribuisci_serie_giorni_principiante(tot_medio + tot_leggero, giorni)
+
+            for i in range(giorni):
+                if distribuzione_giorni_heavy[i] > 0:
+                    esercizi_per_giorno[i].append((e_heavy, distribuzione_giorni_heavy[i],
+                                                   ["6-8"] * distribuzione_giorni_heavy[i], ordine_muscolo))
+                if distribuzione_giorni_light[i] > 0:
+                    reps_light_disponibili = ["12-14"] * tot_medio + ["20-22"] * tot_leggero
+                    reps_da_assegnare = random.sample(reps_light_disponibili,
+                                                      min(len(reps_light_disponibili), distribuzione_giorni_light[i]))
+                    if reps_da_assegnare:
+                        esercizi_per_giorno[i].append(
+                            (e_light, distribuzione_giorni_light[i], reps_da_assegnare, ordine_muscolo))
+
+        for i in range(giorni):
+            esercizi_per_giorno[i].sort(key=lambda x: x[3])
+            for esercizio, serie, reps, ordine_muscolo in esercizi_per_giorno[i]:
+                days[i].aggiungi_esercizio(esercizio, serie, reps, ordine_muscolo)
+
+        return TrainingWeek(numero_settimana=settimana_numero, start_date=oggi, workout_days=days)
+
+    def getSchedaFullBodyPrincipiante(self, context, muscolo_target, giorni=3, volume_overrides=None):
+        """Metodo pubblico per generare schede Full Body per principianti."""
+        if giorni not in [2, 3]:
+            raise ValueError("Per principianti sono supportati solo 2 o 3 giorni di allenamento.")
+        return self._crea_fullbody_principiante(context, muscolo_target, giorni=giorni,
+                                                volume_overrides=volume_overrides)
 # ===============================================================
 # Esempio di Utilizzo
 # ===============================================================

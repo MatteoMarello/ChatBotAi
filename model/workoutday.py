@@ -1,10 +1,5 @@
 from dataclasses import field, dataclass
 from datetime import datetime
-
-from model.esercizio import Esercizio
-
-from dataclasses import field, dataclass
-from datetime import datetime
 from model.esercizio import Esercizio
 
 
@@ -19,14 +14,14 @@ class WorkoutDay:
     performance_log: dict[int, dict] = field(default_factory=dict)
     ordine_muscoli: dict[str, int] = field(default_factory=dict)
 
-    def aggiungi_esercizio(self, esercizio: Esercizio, serie: int, note: str, ordine_muscolo: int = None):
+    def aggiungi_esercizio(self, esercizio: Esercizio, serie: int, reps: list[str], ordine_muscolo: int = None):
         """
         Aggiunge un esercizio al giorno di allenamento.
 
         Args:
             esercizio: L'esercizio da aggiungere
             serie: Numero di serie
-            note: Stringa descrittiva dei rep range (es. "6-8 reps")
+            reps: Lista di stringhe con i rep ranges (es. ["6-8", "6-8", "12-14"])
             ordine_muscolo: Ordine del muscolo nella gerarchia (opzionale)
         """
         if esercizio not in self.esercizi:
@@ -35,15 +30,20 @@ class WorkoutDay:
         if ordine_muscolo is not None:
             self.ordine_muscoli[esercizio.muscolo_primario] = ordine_muscolo
 
-        log = self.performance_log.setdefault(esercizio.id, {
+        # Converti reps in lista se è una stringa singola
+        if isinstance(reps, str):
+            reps = [reps] * serie
+
+        # Assicurati che ci siano abbastanza rep ranges
+        if len(reps) < serie:
+            reps.extend([reps[-1]] * (serie - len(reps)))
+
+        self.performance_log[esercizio.id] = {
             "nome": esercizio.nome,
             "muscolo_primario": esercizio.muscolo_primario,
-            "serie": 0,
-            "note": ""
-        })
-        log["serie"] += serie
-        log["note"] = note  # Usa la nota passata direttamente
-
+            "serie": serie,
+            "reps": reps  # Salva la lista completa dei rep ranges
+        }
     def __str__(self):
         descrizione = f"┌─ GIORNO {self.id_giorno} ({self.split_type}) ─ {self.data.strftime('%d/%m/%Y')} ─┐\n"
 
@@ -57,11 +57,12 @@ class WorkoutDay:
             return self.ordine_muscoli.get(muscolo, 999)
 
         esercizi_per_muscolo = {}
-        for esercizio in self.esercizi:
-            muscolo = esercizio.muscolo_primario
-            if muscolo not in esercizi_per_muscolo:
-                esercizi_per_muscolo[muscolo] = []
-            esercizi_per_muscolo[muscolo].append(esercizio)
+        for esercizio in esercizi:
+            perf = self.performance_log.get(esercizio.id, {})
+            serie_txt = f"{perf.get('serie', 0)} serie"
+            reps = perf.get('reps', ['N/D'])
+            note_txt = ", ".join(reps)  # Unisce i rep ranges con virgole
+            descrizione += f"│   • {esercizio.nome:<30} │ {serie_txt:<8} │ {note_txt:<18} │\n"
 
         muscoli_ordinati = sorted(esercizi_per_muscolo.items(), key=get_ordine_muscolo)
 
