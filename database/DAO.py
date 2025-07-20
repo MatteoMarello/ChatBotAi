@@ -25,8 +25,28 @@ order by ecp.priority_level asc
         cnx.close()
         return results
 
+
+    @staticmethod
+    def getAllEsercizi():
+        cnx = DBConnect.get_connection()
+        cursor = cnx.cursor(dictionary = True)
+
+        query = """select e.*
+from fitness_db.exercises e
+"""
+
+        cursor.execute(query,)
+
+        results = []
+        for row in cursor:
+            results.append(Esercizio(**row))
+
+        cursor.close()
+        cnx.close()
+        return results
+
 if __name__ == '__main__':
     myDAO = DAO()
-    print(myDAO.getEsercizi("Palestra Completa","petto"))
+    print(myDAO.getAllEsercizi( ))
 
 

@@ -4,6 +4,7 @@ from model.workoutday import WorkoutDay
 from typing import List, Dict, Any
 # All'inizio di view.py
 from UI.progress_view import *
+from UI.nutrition_view import *
 
 
 class View:
@@ -16,6 +17,7 @@ class View:
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.bgcolor = "#0f172a"
         self.page.padding = 0
+        self.nutrition_view = NutritionView()
 
         # Colori e stili
         self.colors = {
@@ -39,9 +41,9 @@ class View:
         # Componenti UI
         self._create_components()
 
-        # NUOVO: istanza della vista dei progressi
-        self.progress_view = ProgressView()
+        self.progress_view = ProgressView() # Crea l'istanza della TDEE View
         self.controller.progress_view = self.progress_view
+        self.controller.nutrition_view = self.nutrition_view  # Passa al controller se necessario
 
         # Layout
         self._create_layout()
@@ -107,8 +109,8 @@ class View:
         )
 
     def _create_layout(self):
-        """Crea il layout dell'applicazione."""
-        # NUOVO: NavigationDrawer
+        """Crea il layout dell'applicazione con la nuova TDEE View."""
+        # NavigationDrawer aggiornato con la nuova voce
         self.drawer = ft.NavigationDrawer(
             on_change=self.controller.handle_navigation_change,
             controls=[
@@ -122,10 +124,15 @@ class View:
                     label="Progressi",
                     selected_icon=ft.Icons.SHOW_CHART
                 ),
+                ft.NavigationDrawerDestination(
+                    icon=ft.Icons.RESTAURANT_OUTLINED,
+                    label="Nutrizione",
+                    selected_icon=ft.Icons.RESTAURANT
+                ),
             ]
         )
 
-        # NUOVO: AppBar
+        # AppBar (esistente)
         self.page.appbar = ft.AppBar(
             title=ft.Text("TrainAI", color=ft.Colors.WHITE),
             bgcolor=self.colors['surface'],
@@ -136,7 +143,7 @@ class View:
             ),
         )
 
-        # La Vista di configurazione
+        # La Vista di configurazione (esistente)
         self.config_view = ft.Container(
             content=ft.Column([
                 ft.Text("Configura il tuo Mesociclo",
@@ -156,32 +163,37 @@ class View:
             visible=True
         )
 
-        # Il container della scheda - IMPORTANTE: deve avere scroll per funzionare
+        # Il container della scheda (esistente)
         self.scheda_container = ft.Container(
             content=ft.Column(
                 controls=[],
                 spacing=12,
-                scroll=ft.ScrollMode.AUTO,  # Abilita lo scroll
+                scroll=ft.ScrollMode.AUTO,
                 expand=True
             ),
-            visible=False,  # Nascosto inizialmente
+            visible=False,
             expand=True,
             padding=20
         )
 
-        # Contenuto principale - IMPORTANTE: deve essere scrollabile
+        # Contenuto principale aggiornato con la TDEE View
         main_content = ft.Container(
             content=ft.Column(
                 [
                     self.config_view,
                     self.scheda_container,
-                    self.progress_view  # Aggiunta la vista progressi
+                    self.progress_view,
+                    self.nutrition_view  # Aggiungi la TDEE View
                 ],
-                scroll=ft.ScrollMode.AUTO,  # Abilita lo scroll per l'intera colonna
+                scroll=ft.ScrollMode.AUTO,
                 expand=True
             ),
             expand=True
         )
+
+        # Nascondi tutte le viste tranne quella di configurazione iniziale
+        self.progress_view.visible = False
+        self.nutrition_view.visible = False
 
         # Aggiungi il contenuto alla pagina
         self.page.add(main_content)
@@ -406,14 +418,20 @@ class View:
 
         return performance_list
 
-    def visualizza_giorno(self, giorno_allenamento: WorkoutDay, settimana_num: int):
+    # Nel view.py, sostituisci il metodo visualizza_giorno con questo:
+
+    def visualizza_giorno(self, giorno_allenamento: WorkoutDay, settimana_num: int, is_deload: bool = False):
         """Visualizza il giorno di allenamento."""
         # Pulisci i controlli della colonna interna
         self.scheda_container.content.controls.clear()
 
-        # Titolo
+        # Titolo con indicazione se è settimana di scarico
+        week_label = f"SETTIMANA {settimana_num}"
+        if is_deload:
+            week_label += " (SCARICO)"
+
         title = ft.Text(
-            f"SETTIMANA {settimana_num} - GIORNO {giorno_allenamento.id_giorno}",
+            f"{week_label} - GIORNO {giorno_allenamento.id_giorno}",
             size=20,
             weight=ft.FontWeight.BOLD,
             color=self.colors['text_primary']
@@ -462,10 +480,12 @@ class View:
             self.scheda_container.content.controls.append(save_button_container)
 
         # Mostra la scheda e nascondi la config
+        print(f"DEBUG: Impostando visibilità - config: False, scheda: True, progress: False")
         self.config_view.visible = False
         self.scheda_container.visible = True
         self.progress_view.visible = False
         self.update_view()
+        print(f"DEBUG: Vista aggiornata")
 
     def visualizza_schermata_doms(self, muscoli: List[str]):
         """Visualizza la schermata per i DOMS."""
@@ -620,3 +640,11 @@ class View:
     def _aggiorna_frequenza(self, e):
         """Aggiorna le opzioni di frequenza."""
         self.controller.aggiorna_opzioni_frequenza(self.dd_esperienza.value)
+
+    def mostra_tdee_view(self, visible: bool = True):
+        """Mostra/nasconde la vista TDEE."""
+        self.config_view.visible = False
+        self.scheda_container.visible = False
+        self.progress_view.visible = False
+        self.nutrition_view.visible = visible
+        self.update_view()

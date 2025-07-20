@@ -742,10 +742,12 @@ class Model:
 
         return serie_per_giorno
 
-    def _crea_fullbody_principiante(self, context, muscolo_target, giorni=3, volume_overrides=None):
+# In creascheda.py, sostituisci la funzione _crea_fullbody_principiante con questa
+
+    def _crea_fullbody_principiante(self, context, muscolo_target, giorni=3, volume_overrides=None, settimana=1):
         """Crea una settimana di allenamento Full Body per atleti principianti."""
         MIN_DIRECT_SETS = 4  # Meno volume diretto richiesto per i principianti
-        settimana_numero = 1
+        settimana_numero = settimana  # <-- CORREZIONE: usa il parametro settimana
         oggi = datetime.now()
         days = [WorkoutDay(id_giorno=i + 1, settimana=settimana_numero, split_type="Full Body", data=oggi) for i in
                 range(giorni)]
@@ -769,7 +771,6 @@ class Model:
             volume_indiretto_accumulato = self._calcola_coinvolgimento_indiretto(esercizi_scelti, [muscolo])[muscolo]
             volume_mancante = volume_totale_target - volume_indiretto_accumulato
             volume_diretto_da_aggiungere = max(MIN_DIRECT_SETS, volume_mancante)
-            # --- FINE MODIFICA ---
             volume_effettivo = max(0, int(round(volume_diretto_da_aggiungere)))
 
             if volume_effettivo <= 0:
@@ -817,12 +818,22 @@ class Model:
 
         return TrainingWeek(numero_settimana=settimana_numero, start_date=oggi, workout_days=days)
 
-    def getSchedaFullBodyPrincipiante(self, context, muscolo_target, giorni=3, volume_overrides=None):
-        """Metodo pubblico per generare schede Full Body per principianti."""
-        if giorni not in [2, 3]:
-            raise ValueError("Per principianti sono supportati solo 2 o 3 giorni di allenamento.")
-        return self._crea_fullbody_principiante(context, muscolo_target, giorni=giorni,
-                                                volume_overrides=volume_overrides)
+
+
+    def get_all_exercises_map(self):
+        """
+        Recupera una mappa di tutti gli esercizi dal DB.
+        Restituisce un dizionario {id: nome_esercizio}.
+        """
+        try:
+            # Assumo che esista un metodo DAO.getAllEsercizi()
+            # Se il metodo non esiste, dovrai crearlo nel tuo file DAO.
+            from database.DAO import DAO # Assicurati che l'import sia corretto
+            all_exercises = DAO.getAllEsercizi()
+            return {e.id: e.nome for e in all_exercises}
+        except Exception as e:
+            print(f"Errore nel recuperare la mappa degli esercizi: {e}")
+            return {}
 # ===============================================================
 # Esempio di Utilizzo
 # ===============================================================

@@ -164,10 +164,10 @@ class TrainingAlgorithm:
         if 1 not in self.performance_data or 2 not in self.performance_data:
             return {}
 
-        # Struttura dati: { (esercizio_id, rep_range_target): { settimana: [lista_1rm] } }
+        print("\n--- DEBUG: CALCOLO MIGLIORAMENTO PERFORMANCE SETT. 2 ---")  # PRINT 1
+
         dati_per_gruppo = defaultdict(lambda: defaultdict(list))
 
-        # Popola la struttura dati con gli 1RM di ogni serie
         for settimana, performances in self.performance_data.items():
             if settimana in [1, 2]:
                 for perf in performances:
@@ -177,23 +177,29 @@ class TrainingAlgorithm:
                             chiave = (perf.esercizio_id, rep_range)
                             dati_per_gruppo[chiave][settimana].append(one_rm)
 
-        # Calcola i miglioramenti per ogni gruppo
         miglioramenti_per_esercizio = defaultdict(list)
         for (esercizio_id, rep_range), dati_settimanali in dati_per_gruppo.items():
             if 1 in dati_settimanali and 2 in dati_settimanali:
                 avg_1rm_sett1 = sum(dati_settimanali[1]) / len(dati_settimanali[1])
                 avg_1rm_sett2 = sum(dati_settimanali[2]) / len(dati_settimanali[2])
 
+                # PRINT 2: Stampa i dati grezzi per il debug
+                print(f"  -> Esercizio ID: {esercizio_id}, Rep Range: {rep_range}")
+                print(f"     - 1RM Medio Sett. 1: {avg_1rm_sett1:.2f}")
+                print(f"     - 1RM Medio Sett. 2: {avg_1rm_sett2:.2f}")
+
                 if avg_1rm_sett1 > 0:
                     miglioramento_pct = ((avg_1rm_sett2 - avg_1rm_sett1) / avg_1rm_sett1) * 100
                     miglioramenti_per_esercizio[esercizio_id].append(miglioramento_pct)
+                    # PRINT 3: Stampa il risultato del calcolo
+                    print(f"     ==> Miglioramento calcolato: {miglioramento_pct:+.2f}%")
 
-        # Calcola la media dei miglioramenti per ogni esercizio
         risultato_finale = {}
         for esercizio_id, lista_miglioramenti in miglioramenti_per_esercizio.items():
             if lista_miglioramenti:
                 risultato_finale[esercizio_id] = sum(lista_miglioramenti) / len(lista_miglioramenti)
 
+        print("--------------------------------------------------\n")
         return risultato_finale
 
     def calcola_punti_performance_settimana_2(self) -> Dict[int, int]:
@@ -204,15 +210,18 @@ class TrainingAlgorithm:
         punti = {}
 
         for esercizio_id, miglioramento_pct in miglioramenti.items():
-            if miglioramento_pct >= 5:
+            # SOGLIA MODIFICATA: >= 4% (invece di 5%) per ottenere 2 punti
+            if miglioramento_pct >= 4:
                 punti[esercizio_id] = 2
-            elif 2 <= miglioramento_pct < 5:
+            # SOGLIA MODIFICATA: >= 1.5% (invece di 2%) per ottenere 1 punto
+            elif 1.5 <= miglioramento_pct < 4:
                 punti[esercizio_id] = 1
-            elif 0 <= miglioramento_pct < 2:
+            elif 0 <= miglioramento_pct < 1.5:
                 punti[esercizio_id] = 0
-            elif -2 <= miglioramento_pct < 0:
+            # SOGLIA MODIFICATA: >= -2.5% (invece di -2%) per -1 punto
+            elif -2.5 <= miglioramento_pct < 0:
                 punti[esercizio_id] = -1
-            else:  # miglioramento_pct < -2
+            else:  # peggioramento > 2.5%
                 punti[esercizio_id] = -2
 
         return punti
@@ -228,25 +237,28 @@ class TrainingAlgorithm:
         if not esercizi_muscolo:
             return "mantieni"
 
-        # Calcola media punti per gruppo muscolare
         punti_muscolo = [punti.get(esercizio_id, 0) for esercizio_id in esercizi_muscolo]
+
+        # Gestione del caso in cui non ci siano punti per un muscolo
+        if not punti_muscolo:
+            return "mantieni"
+
         media_punti = sum(punti_muscolo) / len(punti_muscolo)
 
-        # Debug info (opzionale)
+        # La print che avevi già inserito è perfetta qui
         print(f"Muscolo {muscolo}: Punti individuali = {punti_muscolo}, Media = {media_punti:.2f}")
 
-        # Converte in raccomandazione serie
-        if media_punti >= 1.5:
+        # SOGLIE MODIFICATE
+        if media_punti >= 1.2:  # Prima era 1.5
             return "+3 serie"
-        elif 0.5 <= media_punti < 1.5:
+        elif 0.5 <= media_punti < 1.2:  # Prima era 0.5 a 1.5
             return "+2 serie"
-        elif -0.4 <= media_punti <= 0.4:
+        elif -0.5 <= media_punti < 0.5:  # Range leggermente più ampio per "mantieni"
             return "mantieni"
-        elif -1.4 <= media_punti < -0.5:
+        elif -1.2 <= media_punti < -0.5:  # Prima era -1.4 a -0.5
             return "-1 serie"
-        else:  # media_punti <= -1.5
+        else:  # media_punti < -1.2
             return "-2 serie"
-    # ===== SETTIMANA 3 =====
 
     def calcola_sfr_settimana_3(self) -> Dict[int, float]:
         """Calcola SFR per settimana 3 con perdita performance."""
