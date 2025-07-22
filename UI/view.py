@@ -2,24 +2,42 @@ import flet as ft
 from model.esercizio import Esercizio
 from model.workoutday import WorkoutDay
 from typing import List, Dict, Any
-# All'inizio di view.py
 from UI.progress_view import *
 from UI.nutrition_view import *
 
 
 class View:
     def __init__(self, page: ft.Page, controller):
+        """Inizializza la vista principale dell'applicazione."""
         self.page = page
         self.controller = controller
 
-        # Configurazione pagina
-        self.page.title = "TrainAI - Scheda Allenamento"
+        # Configurazione iniziale della pagina
+        self._setup_page_config()
+
+        # Inizializzazione delle viste
+        self._init_views()
+
+        # Creazione dei componenti UI
+        self._create_components()
+
+        # Setup del layout
+        self._create_layout()
+
+        # Collegamento con il controller
+        self.controller.set_view(self)
+
+    def _setup_page_config(self):
+        """Configura le proprietà base della pagina."""
+        self.page.title = "Magno - Scheda Allenamento"
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.bgcolor = "#0f172a"
         self.page.padding = 0
-        self.nutrition_view = NutritionView()
+        self.page.vertical_alignment = ft.MainAxisAlignment.CENTER
+        self.page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
 
-        # Colori e stili
+    def _init_views(self):
+        """Inizializza le diverse viste dell'applicazione."""
         self.colors = {
             'primary': '#3b82f6',
             'surface': '#1e293b',
@@ -31,6 +49,7 @@ class View:
             'warning': '#f59e0b',
             'error': '#ef4444'
         }
+
         self.button_style = ft.ButtonStyle(
             color=ft.Colors.WHITE,
             bgcolor=self.colors['primary'],
@@ -38,21 +57,13 @@ class View:
             padding=ft.padding.symmetric(vertical=12, horizontal=20)
         )
 
-        # Componenti UI
-        self._create_components()
-
-        self.progress_view = ProgressView() # Crea l'istanza della TDEE View
+        self.nutrition_view = NutritionView(controller=self.controller)
+        self.progress_view = ProgressView()
         self.controller.progress_view = self.progress_view
-        self.controller.nutrition_view = self.nutrition_view  # Passa al controller se necessario
-
-        # Layout
-        self._create_layout()
-
-        # Collegamento controller
-        self.controller.set_view(self)
+        self.controller.nutrition_view = self.nutrition_view
 
     def _create_components(self):
-        """Crea i componenti UI principali."""
+        """Crea tutti i componenti UI principali."""
         # Dropdown esperienza
         self.dd_esperienza = ft.Dropdown(
             label="Esperienza",
@@ -65,7 +76,22 @@ class View:
             bgcolor=self.colors['surface_light'],
             border_color=self.colors['border'],
             color=self.colors['text_primary'],
-            border_radius=8
+            border_radius=8,
+            width=300
+        )
+
+        self.dd_attrezzatura = ft.Dropdown(
+            label="Attrezzatura Disponibile",
+            options=[
+                ft.dropdown.Option("palestra_completa", "Palestra Completa"),
+                ft.dropdown.Option("home_manubri", "Home Gym"),
+            ],
+            value="palestra_completa",
+            bgcolor=self.colors['surface_light'],
+            border_color=self.colors['border'],
+            color=self.colors['text_primary'],
+            border_radius=8,
+            width=300
         )
 
         # Dropdown muscolo target
@@ -74,7 +100,8 @@ class View:
             bgcolor=self.colors['surface_light'],
             border_color=self.colors['border'],
             color=self.colors['text_primary'],
-            border_radius=8
+            border_radius=8,
+            width=300
         )
 
         # Dropdown frequenza
@@ -83,10 +110,11 @@ class View:
             bgcolor=self.colors['surface_light'],
             border_color=self.colors['border'],
             color=self.colors['text_primary'],
-            border_radius=8
+            border_radius=8,
+            width=300
         )
 
-        # Pulsanti
+        # Pulsanti principali
         self.btn_crea_scheda = ft.ElevatedButton(
             text="Crea Scheda",
             on_click=self.controller.handle_crea_scheda,
@@ -109,8 +137,8 @@ class View:
         )
 
     def _create_layout(self):
-        """Crea il layout dell'applicazione con la nuova TDEE View."""
-        # NavigationDrawer aggiornato con la nuova voce
+        """Crea il layout principale dell'applicazione."""
+        # Navigation Drawer
         self.drawer = ft.NavigationDrawer(
             on_change=self.controller.handle_navigation_change,
             controls=[
@@ -132,18 +160,31 @@ class View:
             ]
         )
 
-        # AppBar (esistente)
+        # AppBar
         self.page.appbar = ft.AppBar(
-            title=ft.Text("TrainAI", color=ft.Colors.WHITE),
+            title=ft.Row([
+                ft.Image(
+                    src="assets/images/logomagno.png",
+                    width=32,
+                    height=32,
+                    fit=ft.ImageFit.CONTAIN
+                ),
+                ft.Container(width=10),
+                ft.Text("Magno Virtual Coach",
+                        color=ft.Colors.WHITE,
+                        size=20,
+                        weight=ft.FontWeight.BOLD)
+            ], alignment=ft.MainAxisAlignment.CENTER),
             bgcolor=self.colors['surface'],
             leading=ft.IconButton(
                 icon=ft.Icons.MENU,
                 icon_color=ft.Colors.WHITE,
                 on_click=lambda e: self.page.open(self.drawer),
             ),
+            center_title=True
         )
 
-        # La Vista di configurazione (esistente)
+        # Vista di configurazione
         self.config_view = ft.Container(
             content=ft.Column([
                 ft.Text("Configura il tuo Mesociclo",
@@ -153,17 +194,26 @@ class View:
                 ft.Text("Imposta i parametri per la scheda personalizzata",
                         color=self.colors['text_secondary']),
                 ft.Container(height=20),
-                self.dd_esperienza,
-                self.dd_muscolo_target,
-                self.dd_frequenza,
-                ft.Container(height=20),
-                self.btn_crea_scheda
-            ], spacing=12),
+                ft.Container(
+                    content=ft.Column([
+                        self.dd_esperienza,
+                        self.dd_attrezzatura,
+                        self.dd_muscolo_target,
+                        self.dd_frequenza,
+                        ft.Container(height=20),
+                        self.btn_crea_scheda
+                    ], spacing=12, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                    width=400,
+                    padding=20,
+                    bgcolor=self.colors['surface'],
+                    border_radius=12
+                )
+            ], spacing=12, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
             padding=20,
             visible=True
         )
 
-        # Il container della scheda (esistente)
+        # Container per la scheda
         self.scheda_container = ft.Container(
             content=ft.Column(
                 controls=[],
@@ -173,25 +223,25 @@ class View:
             ),
             visible=False,
             expand=True,
-            padding=20
+            padding=20,
+            width=800
         )
 
-        # Contenuto principale aggiornato con la TDEE View
+        # --- NUOVO CODICE ---
         main_content = ft.Container(
-            content=ft.Column(
+            content=ft.Stack(
                 [
                     self.config_view,
                     self.scheda_container,
                     self.progress_view,
-                    self.nutrition_view  # Aggiungi la TDEE View
-                ],
-                scroll=ft.ScrollMode.AUTO,
-                expand=True
+                    self.nutrition_view
+                ]
             ),
-            expand=True
+            expand=True,
+            alignment=ft.alignment.center
         )
 
-        # Nascondi tutte le viste tranne quella di configurazione iniziale
+        # Nascondi viste non iniziali
         self.progress_view.visible = False
         self.nutrition_view.visible = False
 
@@ -603,6 +653,7 @@ class View:
         """Restituisce i valori di configurazione."""
         return {
             "esperienza": self.dd_esperienza.value,
+            "attrezzatura": self.dd_attrezzatura.value,
             "muscolo_target": self.dd_muscolo_target.value,
             "frequenza": self.dd_frequenza.value
         }
@@ -631,20 +682,21 @@ class View:
         """Aggiorna la view."""
         self.page.update()
 
-    def build(self):
-        """Costruisce l'interfaccia (metodo legacy - layout già creato nel costruttore)."""
-        # Il layout è già stato creato nel costruttore __init__
-        # Questo metodo è mantenuto per compatibilità ma non è necessario
-        return None
 
     def _aggiorna_frequenza(self, e):
         """Aggiorna le opzioni di frequenza."""
         self.controller.aggiorna_opzioni_frequenza(self.dd_esperienza.value)
 
-    def mostra_tdee_view(self, visible: bool = True):
-        """Mostra/nasconde la vista TDEE."""
+    def mostra_nutrition_view(self, visible: bool = True):
+        """Mostra/nasconde la vista nutrizionale"""
         self.config_view.visible = False
         self.scheda_container.visible = False
         self.progress_view.visible = False
         self.nutrition_view.visible = visible
+
+        # Assicurati che la nutrition view sia correttamente posizionata
+        if visible:
+            self.nutrition_view.expand = True
+            self.nutrition_view.alignment = ft.alignment.center
+
         self.update_view()

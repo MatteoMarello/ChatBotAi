@@ -51,3 +51,134 @@ This is the main class that orchestrates the entire 3-week adaptation cycle.
   1. **Final Analysis**: It calculates a final SFR for Week 3, accounting for any performance drop due to accumulated fatigue.  
   2. **Creates a Ranking**: It averages the SFRs from Weeks 1 and 3 to rank the exercises from most to least effective.  
   3. **Generates a Report**: It produces a comprehensive summary of the mesocycle, indicating which exercise worked best and which might need replacement in the next cycle.
+
+
+
+
+
+
+# ChatBotAi
+
+**ChatBotAi** è un’applicazione desktop sviluppata in Python con Flet, che genera schede di allenamento personalizzate e le adatta dinamicamente ai progressi dell’utente. Integra un modello MVC, un database MariaDB per la persistenza e una componente di chat AI per consigli nutrizionali.
+
+## 📐 Architettura del Progetto
+
+L’architettura segue il pattern **Model–View–Controller (MVC)**:
+
+- **Model** (cartella `model/`)
+  - `creascheda.py`: motore di generazione iniziale delle schede
+    - Calcolo del BMR (Mifflin–St Jeor)
+    - Selezione esercizi dal database
+    - Distribuzione del volume (serie × ripetizioni) per gruppo muscolare
+  - `adattascheda.py`: motore di adattamento settimanale
+    - Calcolo DOMS e SFR (Strength‑to‑Fatigue Ratio)
+    - Stima 1RM teorico
+    - Regolazione di volume e intensità per le settimane successive
+
+- **Controller** (file `controller.py`)
+  - Orchestrazione delle chiamate al Model
+  - Gestione delle API interne per creazione e adattamento schede
+  - Persistenza su MariaDB con interfaccia SQL
+  - Logica di routing verso le View
+
+- **View** (cartella `view/`)
+  - **Layout principale** (`main.py`)
+    - Definizione della sidebar e del sistema di routing
+    - Container unico per le View caricate dinamicamente
+  - `home_view.py`: Schermata “Scheda Giornaliera”
+  - `progress_view.py`: Schermata “Progressi” con grafici e tabelle
+  - `nutrition_view.py`: Schermata “TDEE & Macronutrienti” (calcolatore)
+  - `chatbot_view.py`: Schermata “Chat Coach” per integrare ChatGPT API
+
+- **Database** (MariaDB)
+  - Tabelle normalizzate: `Utenti`, `Esercizi`, `Schede`, `Scheda_Esercizi`, `Progressi`
+  - Ogni generazione o adattamento crea nuove voci in `Scheda_Esercizi`
+  - I feedback dell’utente (carico effettivo, DOMS) vengono salvati in `Progressi`
+
+## ⚙️ Installazione e Setup
+
+1. Clona il repository:
+   ```bash
+   git clone https://github.com/tuo-username/ChatBotAi.git
+   cd ChatBotAi
+   ```
+2. Crea e attiva un virtual environment:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # Linux/macOS
+   venv\\Scripts\\activate   # Windows
+   ```
+3. Installa le dipendenze:
+   ```bash
+   pip install -r requirements.txt
+   ```
+4. Configura MariaDB:
+   - Esegui lo script `schema.sql` in MariaDB per creare le tabelle
+   - Imposta variabili d’ambiente con credenziali DB
+
+5. Avvia l’app:
+   ```bash
+   python main.py
+   ```
+
+## 🔍 Dettaglio dei Moduli
+
+### 1. Model
+```python
+# creascheda.py
+class CreaScheda:
+    def genera(self, utente_params, esercizi_db):
+        # logica BMR, scelta esercizi, volume distribution...
+```
+```python
+# adattascheda.py
+class AdattaScheda:
+    def adatta(self, scheda_precedente, feedback_utente):
+        # calcolo SFR, stima 1RM, regolazione serie...
+```
+
+### 2. Controller
+```python
+# controller.py
+class Controller:
+    def crea_scheda(self, params):
+        model = CreaScheda()
+        scheda = model.genera(params, self.db.esercizi)
+        self.db.save_scheda(scheda)
+        return scheda
+
+    def adatta_scheda(self, user_id):
+        feedback = self.db.get_feedback(user_id)
+        model = AdattaScheda()
+        nuova_scheda = model.adatta(self.db.get_last_scheda(user_id), feedback)
+        self.db.save_scheda(nuova_scheda)
+        return nuova_scheda
+```
+
+### 3. View
+```python
+# main.py
+def main(page):
+    page.drawer = Sidebar([...])
+    page.views.append(home_view(page))
+    page.views.append(progress_view(page))
+    page.views.append(nutrition_view(page))
+    page.views.append(chatbot_view(page))
+```
+- Le view vengono caricate in base alla route: il layout `main.py` dichiara la sidebar e il `page.on_route_change` sostituisce il contenuto centrale.
+
+## 🧪 Testing
+- **Unit test** per Model: verifica output generazione e adattamento (pytest)
+- **Test manuali UI** in Flet
+- **Survey Google Forms** per validazione di mercato (target universitario)
+
+## 🚀 Esempio di Esecuzione
+![Screenshot dell'app](docs/screenshot.png)
+
+## 📈 Sviluppi Futuri
+- Migrazione su backend FastAPI+Flutter mobile
+- Aggiunta di moduli avanzati: mesocicli custom, chat AI avanzata, gamification
+- Deployment su cloud con continuous integration
+
+---
+*Documentazione generata automaticamente il 21/07/2025*

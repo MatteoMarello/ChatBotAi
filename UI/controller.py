@@ -1,8 +1,8 @@
-import flet as ft
-from creascheda import Model as CreaSchedaModel
-from adattaScheda import TrainingAlgorithm, PerformanceData, DOMSData
+from model.creascheda import Model as CreaSchedaModel
+from model.adattaScheda import TrainingAlgorithm, PerformanceData, DOMSData
 from model.trainingweek import TrainingWeek
 import re
+from collections import defaultdict
 
 from UI.progress_view import *
 
@@ -20,9 +20,9 @@ class Controller:
         # Aggiunta per la nuova vista
         self.progress_view = None
         self.exercise_name_map = {}
-        self.tdee_view = None  # Aggiungi riferimento alla TDEE View
-
-        # NUOVA FUNZIONE per gestire la navigazione
+        self.exercise_details_map = {}  # Mappa con i dettagli completi degli esercizi
+        self.nutrition_view = None  # Aggiungi riferimento alla TDEE View
+        self.context = None
 
     def handle_navigation_change(self, e):
         selected_index = e.control.selected_index
@@ -50,42 +50,74 @@ class Controller:
         elif selected_index == 2:  # Nutrizione (nutrition)
             if hasattr(self, 'nutrition_view') and self.nutrition_view:
                 self.nutrition_view.visible = True
-                # Opzionale: resetta o aggiorna i dati se necessario
-                # self.nutrition_view.reset_inputs()
 
         self.view.update_view()
 
-    # In controller.py, sostituisci questa funzione
+    # In controller.py, SOSTITUISCI l'intera funzione _prepare_and_show_progress
+
     def _prepare_and_show_progress(self):
-        """Prepara i dati per i grafici di 1RM e volume e aggiorna la vista."""
-        # 1. Prepara dati per il grafico 1RM
-        progress_data_1rm = {}
-        for settimana, performances in self.training_algo.performance_data.items():
+        """
+        Prepara i dati calcolando il miglioramento % finale per gli esercizi 'heavy'
+        e il volume, poi aggiorna la vista dei progressi.
+        """
+        # 1. Raggruppa le performance per muscolo e filtra per l'esercizio "heavy"
+        #    (Questa parte della logica rimane simile a prima)
+        perf_by_muscle = defaultdict(list)
+        for performances in self.training_algo.performance_data.values():
             for perf in performances:
-                # Usa la mappa per ottenere il nome dell'esercizio dinamicamente
-                nome_esercizio = self.exercise_name_map.get(perf.esercizio_id, f"Esercizio ID: {perf.esercizio_id}")
-                one_rm = perf.one_rm
+                perf_by_muscle[perf.muscolo_primario].append(perf)
 
-                if nome_esercizio not in progress_data_1rm:
-                    progress_data_1rm[nome_esercizio] = []
+        heavy_exercise_data = {}
+        for muscolo, performances in perf_by_muscle.items():
+            if not performances:
+                continue
 
-                progress_data_1rm[nome_esercizio].append((settimana, one_rm))
+            exercise_ids = {p.esercizio_id for p in performances}
+            heavy_exercise_id = None
+            min_rep = float('inf')
+            for ex_id in exercise_ids:
+                exercise_obj = self.exercise_details_map.get(ex_id)
+                if exercise_obj and exercise_obj.range_ripetizioni:
+                    low_rep, _ = CreaSchedaModel.parse_rep_range(exercise_obj.range_ripetizioni)
+                    if low_rep < min_rep:
+                        min_rep = low_rep
+                        heavy_exercise_id = ex_id
 
-        # Rimuovi duplicati e ordina, assicurando un solo valore (il massimo) per settimana
-        for nome, data in progress_data_1rm.items():
-            unique_per_week = {}
-            for settimana, one_rm in data:
-                unique_per_week[settimana] = max(unique_per_week.get(settimana, 0), one_rm)
+            if heavy_exercise_id:
+                nome_esercizio = self.exercise_name_map.get(heavy_exercise_id, f"ID:{heavy_exercise_id}")
+                chiave_grafico = f"{muscolo} ({nome_esercizio})"
 
-            progress_data_1rm[nome] = sorted(unique_per_week.items())
+                # Raccogli i dati di 1RM per settimana per l'esercizio heavy
+                weekly_max_1rm = defaultdict(float)
+                for p in performances:
+                    if p.esercizio_id == heavy_exercise_id:
+                        weekly_max_1rm[p.settimana] = max(weekly_max_1rm[p.settimana], p.one_rm)
 
-        # 2. Prepara dati per il grafico del volume (direttamente da self.volume_history)
+                if weekly_max_1rm:
+                    heavy_exercise_data[chiave_grafico] = sorted(weekly_max_1rm.items())
+
+        # 2. Calcola il miglioramento percentuale dalla prima all'ultima settimana
+        percentage_improvement_data = {}
+        for nome_serie, data_points in heavy_exercise_data.items():
+            # Assicurati che ci siano almeno due punti dati (es. settimana 1 e 3) per calcolare un progresso
+            if len(data_points) < 2:
+                continue
+
+            # data_points è già ordinato per settimana
+            baseline_1rm = data_points[0][1]  # 1RM della prima settimana registrata
+            final_1rm = data_points[-1][1]  # 1RM dell'ultima settimana registrata
+
+            if baseline_1rm > 0:
+                improvement = ((final_1rm - baseline_1rm) / baseline_1rm) * 100
+                percentage_improvement_data[nome_serie] = improvement
+
+        # 3. Prepara i dati del volume (invariato)
         volume_data = self.volume_history
 
-        # 3. Invia entrambi i set di dati alla vista dei progressi
+        # 4. Invia i nuovi dati (miglioramento % e volume) alla vista
         if self.progress_view:
-            self.progress_view.update_view(progress_data_1rm, volume_data)
-
+            # Nota che il primo argomento ora contiene i dati percentuali
+            self.progress_view.update_view(percentage_improvement_data, volume_data)
 
     def set_view(self, view):
         """Imposta la view e carica le opzioni iniziali."""
@@ -118,10 +150,8 @@ class Controller:
             if self.view:
                 self.view.show_snackbar(f"Errore nell'aggiornamento frequenza: {ex}", ft.Colors.RED)
 
-    # In controller.py, sostituisci questa funzione
-
     def handle_crea_scheda(self, e):
-        """Gestisce la creazione della scheda iniziale."""
+        """Gestisce la creazione della scheda iniziale con gestione attrezzatura."""
         self.config_values = self.view.get_config_values()
 
         if not all(self.config_values.values()):
@@ -132,8 +162,11 @@ class Controller:
         self.view.update_view()
 
         try:
-            if not self.exercise_name_map:
-                self.exercise_name_map = self.crea_scheda_model.get_all_exercises_map()
+            if not self.exercise_details_map:
+                # Ottieni gli oggetti completi degli esercizi
+                self.exercise_details_map = self.crea_scheda_model.get_all_exercises_details_map()
+                # Deriva la mappa dei nomi dalla mappa dei dettagli
+                self.exercise_name_map = {ex_id: ex.nome for ex_id, ex in self.exercise_details_map.items()}
 
             esperienza = self.config_values["esperienza"]
             params = self._get_scheda_params()
@@ -153,18 +186,14 @@ class Controller:
                 return
 
             self._reset_ciclo()
-
-            # AGGIUNGI QUESTA RIGA: nascondi esplicitamente la configurazione
             self.view.mostra_schermata_config(visible=False)
-
             self.view.show_snackbar("Scheda creata con successo!", ft.Colors.GREEN)
             self.prosegui_al_prossimo_giorno()
 
         except Exception as ex:
             self.view.show_snackbar(f"Errore critico nella creazione: {ex}", ft.Colors.RED)
-            self.view.mostra_schermata_config(visible=True)  # Mostra di nuovo la config in caso di errore
+            self.view.mostra_schermata_config(visible=True)
         finally:
-            # Assicura che il pulsante sia riattivato in caso di errori
             if self.view.btn_crea_scheda.disabled:
                 self.view.btn_crea_scheda.disabled = False
             self.view.update_view()
@@ -177,7 +206,6 @@ class Controller:
             self.view.show_snackbar("Nessuna performance inserita. Compila almeno una serie.", ft.Colors.ORANGE)
             return
 
-        # Disabilita il pulsante per evitare doppi salvataggi
         self.view.btn_salva_performance.disabled = True
         self.view.update_view()
 
@@ -185,8 +213,6 @@ class Controller:
             for p_data in performance_list_raw:
                 if not p_data["sets"]:
                     continue
-
-                # Assicurati che p_data contenga "muscolo_primario"
                 if "muscolo_primario" not in p_data:
                     self.view.show_snackbar(
                         f"Errore: muscolo primario mancante per esercizio ID {p_data['esercizio_id']}", ft.Colors.RED)
@@ -196,13 +222,12 @@ class Controller:
                     esercizio_id=p_data["esercizio_id"],
                     giorno=p_data["giorno"],
                     settimana=self.current_week_num,
-                    muscolo_primario=p_data["muscolo_primario"],  # <-- AGGIUNGI QUESTO
+                    muscolo_primario=p_data["muscolo_primario"],
                     sets=p_data["sets"],
                     mmc=int(p_data["controls"]["mmc"].value),
                     pump=int(p_data["controls"]["pump"].value),
                     dolori_articolari=int(p_data["controls"]["dolori"].value)
                 )
-
                 self.training_algo.aggiungi_performance(self.current_week_num, performance)
 
             self.view.show_snackbar("Performance del giorno salvate!", ft.Colors.GREEN)
@@ -236,42 +261,26 @@ class Controller:
                     doms_value=doms["value"]
                 ))
 
-            # --- INIZIO MODIFICA ---
-
-            # 1. Ottieni la lista completa dei muscoli per lo split corrente.
-            #    Questo assicura che consideriamo tutti i muscoli, anche quelli con volume 0.
             tutti_i_muscoli_dello_split = self.crea_scheda_model.split_muscoli["Full Body"]
-
-            # 2. Crea un dizionario di volumi completo per la settimana 1, inserendo 0 per i muscoli mancanti.
             volume_registrato_sett_1 = self.volume_history.get(1, {})
             volume_completo_sett_1 = {
                 muscolo: volume_registrato_sett_1.get(muscolo, 0)
                 for muscolo in tutti_i_muscoli_dello_split
             }
-
-            # 3. Calcola gli aggiustamenti iterando sulla lista completa dei muscoli.
             aggiustamenti = {}
             esperienza = self.config_values["esperienza"]
 
             for muscolo in tutti_i_muscoli_dello_split:
                 raccomandazione, motivo = self.training_algo.calcola_previsione_serie_settimana_2(muscolo, esperienza)
                 aggiustamenti[muscolo] = raccomandazione
-
-                # Se c'è un motivo, mostra una notifica all'utente
                 if motivo:
-                    # Rendi il messaggio più specifico per evitare confusione
                     messaggio_notifica = f"Info per {muscolo}: {motivo}"
                     if "mantenuto" not in motivo:
                         messaggio_notifica = f"Volume per {muscolo} mantenuto: {motivo}"
                     self.view.show_snackbar(messaggio_notifica, ft.Colors.ORANGE)
 
-            # 4. Calcola il nuovo volume usando il dizionario di volumi completo.
             volume_overrides = self._calcola_nuovo_volume(volume_completo_sett_1, aggiustamenti)
-
-            # --- FINE MODIFICA ---
-
             self.training_week = self._genera_prossima_settimana(volume_overrides)
-
             self.view.show_snackbar("DOMS salvati! Generazione settimana 2...", ft.Colors.GREEN)
             self._passa_a_settimana_successiva()
 
@@ -281,18 +290,13 @@ class Controller:
             self.view.btn_salva_doms.disabled = False
             self.view.update_view()
 
-    # In controller.py, sostituisci la funzione esistente con questa
-
     def prosegui_al_prossimo_giorno(self):
         """Procede al prossimo giorno di allenamento."""
         self.current_day_index += 1
 
         if self.current_day_index < len(self.training_week.workout_days):
             giorno_corrente = self.training_week.workout_days[self.current_day_index]
-            # Controlla se la settimana corrente è quella di scarico (la quarta)
             is_deload_week = self.current_week_num == 4
-            # Passa il flag 'is_deload_week' alla view
-            print(f"DEBUG: Mostrando giorno {self.current_day_index + 1}, settimana {self.current_week_num}")
             self.view.visualizza_giorno(giorno_corrente, self.current_week_num, is_deload=is_deload_week)
         else:
             self.handle_fine_settimana()
@@ -303,13 +307,11 @@ class Controller:
 
         try:
             if self.current_week_num == 1:
-                # Fine settimana 1: mostra schermata DOMS
                 self.training_algo.calcola_sfr_settimana_1()
                 muscoli = list(self.volume_history[1].keys())
                 self.view.visualizza_schermata_doms(muscoli)
 
             elif self.current_week_num == 2:
-                # Fine settimana 2: calcola e genera settimana 3
                 self.training_algo.calcola_punti_performance_settimana_2()
                 aggiustamenti = {m: self.training_algo.calcola_serie_settimana_3(m)
                                  for m in self.volume_history[2].keys()}
@@ -318,23 +320,14 @@ class Controller:
                 self._passa_a_settimana_successiva()
 
             elif self.current_week_num == 3:
-                # Fine settimana 3: genera settimana di scarico (settimana 4)
                 self.view.show_snackbar("Generazione della settimana di scarico...", ft.Colors.CYAN)
-
-                # Calcola il volume della settimana di scarico (metà della settimana 3)
                 volume_settimana_3 = self.volume_history.get(3, {})
-                # Assicura un volume minimo (es. 2 serie) e arrotonda
                 volume_scarico = {muscolo: max(2, round(volume / 2)) for muscolo, volume in volume_settimana_3.items()}
-
-                self.view.show_snackbar(f"Volume di scarico calcolato.", ft.Colors.CYAN)
-
-                # Genera la scheda di scarico usando gli overrides
                 self.training_week = self._genera_prossima_settimana(volume_scarico)
                 self._passa_a_settimana_successiva()
 
             elif self.current_week_num >= 4:
-                # Fine settimana 4 (scarico): calcola i dati finali e mostra il report
-                self.training_algo.calcola_sfr_settimana_3()  # Analizza i dati della settimana 3
+                self.training_algo.calcola_sfr_settimana_3()
                 report = self.training_algo.genera_report_completo()
                 self.view.visualizza_report_finale(report)
 
@@ -356,9 +349,17 @@ class Controller:
         self.prosegui_al_prossimo_giorno()
 
     def _get_scheda_params(self, volume_overrides=None):
-        """Restituisce un dizionario di parametri per creare una scheda."""
+        """Restituisce un dizionario di parametri per creare una scheda con supporto attrezzatura."""
+        attrezzatura_value = self.config_values.get("attrezzatura", "palestra_completa")
+
+        # Converte il valore del dropdown nel formato stringa atteso dal modello/DAO
+        if attrezzatura_value == "home_manubri":
+            context = "Home Manubri"
+        else:  # "palestra_completa" o il valore di default
+            context = "Palestra Completa"
+
         params = {
-            "context": "Palestra Completa",
+            "context": context,  # Passa il contesto corretto
             "muscolo_target": self.config_values["muscolo_target"],
             "giorni": int(self.config_values["frequenza"]),
         }
@@ -366,15 +367,11 @@ class Controller:
             params["volume_overrides"] = volume_overrides
         return params
 
-    # controller.py
-
     def _genera_prossima_settimana(self, volume_overrides):
         """Funzione helper per generare la scheda della settimana successiva."""
         esperienza = self.config_values["esperienza"]
+        # _get_scheda_params ora gestisce correttamente il context
         params = self._get_scheda_params(volume_overrides)
-
-        # --- AGGIUNGI QUESTA RIGA ---
-        # La settimana da generare è la successiva a quella corrente
         params["settimana"] = self.current_week_num + 1
 
         if esperienza == "principiante":
@@ -382,46 +379,45 @@ class Controller:
         else:
             return self.crea_scheda_model.getSchedaFullBodyIntermedio(**params)
 
-    # In controller.py, sostituisci questa funzione
-
     def _registra_volume_settimanale(self):
         """Registra il volume settimanale per ogni muscolo in modo sicuro."""
         volume_corrente = {}
+        if not self.training_week or not self.training_week.workout_days:
+            return  # Esce se la scheda non è ancora stata creata
 
         for day in self.training_week.workout_days:
             for esercizio in day.esercizi:
                 muscolo = esercizio.muscolo_primario
-                # Accesso sicuro al log per evitare l'errore KeyError
+                # Il volume si basa sulle serie assegnate, non su quelle eseguite
                 log_esercizio = day.performance_log.get(esercizio.id, {})
-                serie = log_esercizio.get('serie', 0)  # Default a 0 se la chiave 'serie' non esiste
+                serie = log_esercizio.get('serie', 0)
                 volume_corrente[muscolo] = volume_corrente.get(muscolo, 0) + serie
-
         self.volume_history[self.current_week_num] = volume_corrente
 
     def _calcola_nuovo_volume(self, volume_precedente: dict, aggiustamenti: dict) -> dict:
         """Calcola il nuovo volume basato sugli aggiustamenti."""
         nuovo_volume = {}
         print("\n--- CALCOLO NUOVO VOLUME SETTIMANA SUCCESSIVA ---")
-
         for muscolo, volume in volume_precedente.items():
             raccomandazione = aggiustamenti.get(muscolo, "mantieni")
             numeri = [int(n) for n in re.findall(r'([+-]?\d+)', raccomandazione)]
-
             print(f"\n- Muscolo: {muscolo.upper()}")
             print(f"  - Volume precedente: {volume} serie")
             print(f"  - Raccomandazione ricevuta: '{raccomandazione}'")
-
             variazione = 0
             if numeri:
-                # Prende il primo (e unico) numero trovato nella stringa
                 variazione = numeri[0]
                 print(f"  - Azione: Variazione diretta -> {variazione:+}")
             else:
                 print("  - Azione: Mantenere il volume")
-
-            volume_calcolato = max(4, volume + variazione)  # Minimo 4 serie
+            volume_calcolato = max(4, volume + variazione)
             nuovo_volume[muscolo] = volume_calcolato
             print(f"  ==> Nuovo Volume: {volume_calcolato} serie")
-
         print("-------------------------------------------------\n")
         return nuovo_volume
+
+    # RIMUOVERE I METODI fillDDAttrezzatura e readDDYearValue DA QUESTO FILE
+
+
+
+

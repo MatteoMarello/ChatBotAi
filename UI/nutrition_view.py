@@ -1,7 +1,6 @@
 import flet as ft
 from typing import Optional, Dict, Any
-from nutrition_service import NutritionService, NutritionCache
-from datetime import *
+from model.nutrition_service import NutritionService, NutritionCache
 
 
 class NutritionView(ft.Container):

@@ -30,79 +30,109 @@ class ProgressView(ft.Container):
             [self.title, self.subtitle, ft.Divider(color=self.colors['border']), self.chart_container], spacing=10,
             scroll=ft.ScrollMode.AUTO, expand=True)
 
-    def update_view(self, progress_data_1rm: Dict[str, List[Tuple[int, float]]],
+    def update_view(self, improvement_data: Dict[str, float],
                     volume_data: Dict[int, Dict[str, int]]):
-        """Aggiorna la vista con i grafici di 1RM e volume."""
+        """Aggiorna la vista con i grafici di miglioramento % e volume."""
         self.chart_container.controls.clear()
         has_content = False
 
-        if progress_data_1rm:
-            self._crea_grafico_1rm(progress_data_1rm)
+        # Usa la nuova funzione per creare il grafico a barre del miglioramento
+        if improvement_data:
+            self._crea_grafico_miglioramento(improvement_data)
             has_content = True
 
         if volume_data and any(volume_data.values()):
-            self._crea_grafico_volume(volume_data)
+            self._crea_grafico_volume(volume_data)  # Questo grafico rimane invariato
             has_content = True
 
         if not has_content:
             self.chart_container.controls.append(ft.Container(
                 content=ft.Column([
-                    ft.Icon(ft.Icons.BAR_CHART, size=60, color=self.colors['text_secondary']),
+                    ft.Icon(ft.Icons.SHOW_CHART, size=60, color=self.colors['text_secondary']),
                     ft.Text("Nessun dato di progresso disponibile", size=18, weight=ft.FontWeight.BOLD,
                             color=self.colors['text_primary'], text_align=ft.TextAlign.CENTER),
-                    ft.Text("Completa almeno una settimana di allenamento per vedere i tuoi grafici!",
+                    ft.Text("Completa almeno due settimane di allenamento per vedere i tuoi progressi!",
                             color=self.colors['text_secondary'], text_align=ft.TextAlign.CENTER)
                 ], spacing=12, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                 padding=40, bgcolor=self.colors['surface'], border_radius=12, alignment=ft.alignment.center,
                 border=ft.border.all(1, self.colors['border'])
             ))
         self.update()
+    # In progress_view.py, SOSTITUISCI la funzione _crea_grafico_1rm
 
-    def _crea_grafico_1rm(self, progress_data: Dict[str, List[Tuple[int, float]]]):
-        """Crea il contenitore del grafico per l'andamento del massimale (1RM)."""
-        all_weeks = [w for data in progress_data.values() for w, v in data]
-        all_values = [v for data in progress_data.values() for w, v in data]
-        if not all_values: return
+    def _crea_grafico_miglioramento(self, improvement_data: Dict[str, float]):
+        """Crea un grafico a barre per il miglioramento percentuale del 1RM."""
 
-        min_week, max_week = (min(all_weeks), max(all_weeks)) if all_weeks else (1, 1)
-        min_value, max_value = (min(all_values), max(all_values)) if all_values else (0, 100)
+        bar_groups = []
+        all_values = list(improvement_data.values())
 
-        chart = ft.LineChart(
-            tooltip_bgcolor=ft.Colors.with_opacity(0.8, ft.Colors.BLUE_GREY), expand=True, height=400,
-            left_axis=ft.ChartAxis(labels_size=40, title=ft.Text("1RM (kg)", color=self.colors['text_secondary'])),
+        # Colori per le barre: verde se positivo, rosso se negativo
+        def get_color(value):
+            return ft.Colors.GREEN_ACCENT_400 if value >= 0 else ft.Colors.RED_400
+
+        for i, (nome_serie, value) in enumerate(improvement_data.items()):
+            bar_groups.append(
+                ft.BarChartGroup(
+                    x=i,
+                    bar_rods=[
+                        ft.BarChartRod(
+                            from_y=0,
+                            to_y=value,
+                            width=30,
+                            color=get_color(value),
+                            tooltip=f"{nome_serie}\nMiglioramento: {value:+.1f}%",
+                            border_radius=4,
+                        )
+                    ],
+                )
+            )
+
+        # Trova i limiti per l'asse Y
+        min_y = min(all_values) if any(v < 0 for v in all_values) else 0
+        max_y = max(all_values) if any(v > 0 for v in all_values) else 0
+
+        y_padding = (max_y - min_y) * 0.1  # Aggiungi 10% di padding
+        if y_padding == 0: y_padding = 5  # Padding minimo
+
+        chart = ft.BarChart(
+            bar_groups=bar_groups,
+            expand=True,
+            height=400,
+            left_axis=ft.ChartAxis(
+                title=ft.Text("Miglioramento %", color=self.colors['text_secondary']),
+                labels_size=40,
+                # Calcola l'intervallo delle griglie in modo dinamico
+                labels_interval=max(1, round((max_y - min_y) / 5)) if max_y > min_y else 5
+            ),
             bottom_axis=ft.ChartAxis(
-                labels=[ft.ChartAxisLabel(value=i, label=ft.Text(f"S{i}", color=self.colors['text_secondary'])) for i in
-                        range(min_week, max_week + 1)], labels_size=40),
-            horizontal_grid_lines=ft.ChartGridLines(interval=max(1, round((max_value - min_value) / 5)),
-                                                    color=ft.Colors.with_opacity(0.2, ft.Colors.GREY_50), width=1),
-            min_y=max(0, min_value - 10), max_y=max_value + 10, min_x=min_week, max_x=max_week,
-            data_series=[]
+                labels=[
+                    ft.ChartAxisLabel(value=i,
+                                      label=ft.Text(nome.split(' ')[0], size=10, color=self.colors['text_secondary']))
+                    for i, nome in enumerate(improvement_data.keys())
+                ],
+                labels_size=30,
+            ),
+            horizontal_grid_lines=ft.ChartGridLines(
+                interval=max(1, round((max_y - min_y) / 5)) if max_y > min_y else 5,
+                color=ft.Colors.with_opacity(0.2, ft.Colors.GREY_50),
+                width=1
+            ),
+            min_y=min_y - y_padding,
+            max_y=max_y + y_padding,
         )
 
-        for i, (nome_esercizio, data_points) in enumerate(progress_data.items()):
-            chart.data_series.append(ft.LineChartData(
-                color=CHART_COLORS[i % len(CHART_COLORS)], stroke_width=3, curved=True,
-                data_points=[ft.LineChartDataPoint(x=settimana, y=one_rm,
-                                                   tooltip=f"{nome_esercizio}\nSett. {settimana}: {one_rm:.1f} kg") for
-                             settimana, one_rm in data_points]
-            ))
-
-        legend_items = [ft.Row(
-            [ft.Container(width=15, height=15, bgcolor=CHART_COLORS[i % len(CHART_COLORS)], border_radius=4),
-             ft.Text(nome, color=self.colors['text_primary'])]) for i, nome in enumerate(progress_data.keys())]
-
-        container_1rm = ft.Container(
+        container_miglioramento = ft.Container(
             content=ft.Column([
-                ft.Text("Andamento Massimale (1RM)", size=18, weight=ft.FontWeight.BOLD,
+                ft.Text("Miglioramento Percentuale Finale (1RM)", size=18, weight=ft.FontWeight.BOLD,
                         color=self.colors['text_primary']),
-                ft.Text("Stima del tuo massimale per gli esercizi principali.", color=self.colors['text_secondary']),
+                ft.Text("Variazione % del massimale stimato dalla prima all'ultima settimana.",
+                        color=self.colors['text_secondary']),
                 ft.Divider(color=self.colors['border']),
-                chart,
-                ft.Row(controls=legend_items, spacing=15, wrap=True)
+                chart
             ], spacing=10),
             padding=20, bgcolor=self.colors['surface'], border_radius=12, border=ft.border.all(1, self.colors['border'])
         )
-        self.chart_container.controls.append(container_1rm)
+        self.chart_container.controls.append(container_miglioramento)
 
     def _crea_grafico_volume(self, volume_data: Dict[int, Dict[str, int]]):
         """Crea il grafico a barre per il volume settimanale."""

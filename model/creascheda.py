@@ -16,6 +16,7 @@ class Model:
         Costruttore della classe Model.
         Inizializza gli attributi necessari, come la mappatura degli split.
         """
+        self._context = None
         self.split_muscoli = {
             "Full Body": ["Petto", "Schiena", "Spalle", "Bicipiti", "Tricipiti", "Quadricipiti", "Femorali", "Glutei",
                           "Polpacci"],
@@ -40,6 +41,7 @@ class Model:
         ]
 
     # --------------------------------
+
 
     def get_weekly_sets(self, livello, muscolo, mesociclo):
         """Calcola il volume settimanale target per un muscolo."""
@@ -198,7 +200,8 @@ class Model:
 
         return muscoli_ordinati
 
-    def _parse_rep_range(self, rep_str):
+    @staticmethod
+    def parse_rep_range(rep_str: str) -> tuple[int, int]:
         """Parse string like '[5,7]' into tuple of integers (5,7)"""
         try:
             # Remove brackets and split
@@ -206,7 +209,8 @@ class Model:
             low, high = map(int, clean_str.split(','))
             return low, high
         except:
-            return (0, 0)  # Default if parsing fails
+            # Restituisce un valore alto per evitare di essere scelto come "heavy" in caso di errore
+            return 99, 99
 
     def _crea_fullbody_intermedio(self, context, muscolo_target, giorni=3, volume_overrides=None, settimana=1):
         MIN_DIRECT_SETS = 6
@@ -266,8 +270,6 @@ class Model:
                 print(f"  - Skipping direct work for {muscolo}, target met.")
                 continue
 
-
-            # Prendi i primi due esercizi dalla lista ordinata per priorità
             esercizi_disponibili = DAO.getEsercizi(context, muscolo)
             if not esercizi_disponibili:
                 print(f"  - No exercises found for {muscolo}.")
@@ -285,8 +287,8 @@ class Model:
                 print(f"  - Only one exercise available: {primo_esercizio.nome}")
 
             # Determina quale è "pesante" e quale è "leggero" in base al range di ripetizioni
-            range_primo = self._parse_rep_range(primo_esercizio.range_ripetizioni)
-            range_secondo = self._parse_rep_range(secondo_esercizio.range_ripetizioni)
+            range_primo = Model.parse_rep_range(primo_esercizio.range_ripetizioni)
+            range_secondo = Model.parse_rep_range(secondo_esercizio.range_ripetizioni)
 
             # L'esercizio con il minimo più basso del range è quello "pesante"
             if range_primo[0] < range_secondo[0]:
@@ -517,8 +519,8 @@ class Model:
         print(f"  - Selected exercises: {primo_esercizio.nome} and {secondo_esercizio.nome}")
 
         # Determina quale è "pesante" e quale è "leggero"
-        range_primo = self._parse_rep_range(primo_esercizio.range_ripetizioni)
-        range_secondo = self._parse_rep_range(secondo_esercizio.range_ripetizioni)
+        range_primo = Model.parse_rep_range(primo_esercizio.range_ripetizioni)
+        range_secondo = Model.parse_rep_range(secondo_esercizio.range_ripetizioni)
 
         if range_primo[0] < range_secondo[0]:
             e_heavy = primo_esercizio
@@ -783,8 +785,8 @@ class Model:
             primo_esercizio = esercizi_disponibili[0]
             secondo_esercizio = esercizi_disponibili[1] if len(esercizi_disponibili) >= 2 else primo_esercizio
 
-            range_primo = self._parse_rep_range(primo_esercizio.range_ripetizioni)
-            range_secondo = self._parse_rep_range(secondo_esercizio.range_ripetizioni)
+            range_primo = Model.parse_rep_range(primo_esercizio.range_ripetizioni)
+            range_secondo = Model.parse_rep_range(secondo_esercizio.range_ripetizioni)
 
             e_heavy, e_light = (primo_esercizio, secondo_esercizio) if range_primo[0] <= range_secondo[0] else (
             secondo_esercizio, primo_esercizio)
@@ -834,6 +836,21 @@ class Model:
         except Exception as e:
             print(f"Errore nel recuperare la mappa degli esercizi: {e}")
             return {}
+
+    def get_all_exercises_details_map(self):
+        """
+        Recupera una mappa di tutti gli esercizi dal DB con i loro oggetti completi.
+        Restituisce un dizionario {id: Esercizio_object}.
+        """
+        try:
+            from database.DAO import DAO
+            all_exercises = DAO.getAllEsercizi()
+            return {e.id: e for e in all_exercises}
+        except Exception as e:
+            print(f"Errore nel recuperare la mappa dettagliata degli esercizi: {e}")
+            return {}
+
+
 # ===============================================================
 # Esempio di Utilizzo
 # ===============================================================

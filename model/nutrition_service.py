@@ -26,7 +26,7 @@ class NutritionService:
         self.api_key = (
                 api_key or
                 os.getenv("OPENROUTER_API_KEY") or
-                "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"
+                "keydainserire"
         )
 
         if not self.api_key:
