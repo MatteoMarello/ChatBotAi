@@ -304,7 +304,7 @@ class View:
 
 
             # Modifica qui: mostra sempre il range target in modo più visibile
-            target_text = f"Target: {rep_target}" if rep_target else "Target: N/D"
+            target_text = f"Target: {rep_target} rep" if rep_target else "Target: N/D"
 
             serie_row = ft.Container(
                 content=ft.Column([

@@ -6,11 +6,7 @@ from model.trainingweek import TrainingWeek
 from model.workoutday import WorkoutDay
 
 
-# ===============================================================
-# FILE: model.py (LOGICA PRINCIPALE)
-# ===============================================================
 class Model:
-    # --- METODO __init__ AGGIORNATO ---
     def __init__(self):
         """
         Costruttore della classe Model.
@@ -44,7 +40,7 @@ class Model:
 
 
     def get_weekly_sets(self, livello, muscolo, mesociclo):
-        """Calcola il volume settimanale target per un muscolo."""
+        """Calcola il volume settimanale target per un muscolo in un certo mesociclo."""
         base_volumes = {
             "principiante": {"Petto": (10, 16), "Schiena": (12, 18), "Spalle": (12, 18), "Bicipiti": (8, 14),
                              "Tricipiti": (8, 14), "Quadricipiti": (10, 18), "Femorali": (6, 12), "Glutei": (8, 14),
@@ -91,6 +87,7 @@ class Model:
             tot_pesante = volume_effettivo - tot_medio - tot_leggero
 
         return int(tot_pesante), int(tot_medio), int(tot_leggero)
+
 
     def _distribuisci_serie_giorni_intermedio(self, volume_totale, giorni=3):
         """
@@ -202,7 +199,7 @@ class Model:
 
     @staticmethod
     def parse_rep_range(rep_str: str) -> tuple[int, int]:
-        """Parse string like '[5,7]' into tuple of integers (5,7)"""
+        """Parse string like '[5,7]' into tuple of integers (5,7), serve per confrontare i due minimi e scegliere l'esercizio più adatto a range di rep pesante"""
         try:
             # Remove brackets and split
             clean_str = rep_str.strip('[]')
@@ -234,7 +231,6 @@ class Model:
         for ordine_muscolo, muscolo in enumerate(ordered_muscles):
             print(f"Processing: {muscolo}")
 
-            # --- INIZIO MODIFICA ---
             # Se esiste un override, quel valore diventa il numero esatto di serie dirette (volume_effettivo),
             # saltando tutti gli altri calcoli di volume.
             if volume_overrides and muscolo in volume_overrides:
@@ -260,11 +256,6 @@ class Model:
 
                 volume_diretto_da_aggiungere = max(MIN_DIRECT_SETS, volume_mancante)
                 volume_effettivo = max(0, int(round(volume_diretto_da_aggiungere)))
-
-                print(f"  - Current effective sets: {serie_effettive_attuali:.1f}")
-                print(f"  - Missing volume: {volume_mancante:.1f}")
-                print(f"  - Direct sets to add: {volume_effettivo}")
-            # --- FINE MODIFICA ---
 
             if volume_effettivo <= 0:
                 print(f"  - Skipping direct work for {muscolo}, target met.")
@@ -464,7 +455,7 @@ class Model:
 
         print(f"Processing: {muscolo}")
 
-        # *** INIZIO MODIFICA: Gestione volume_overrides ***
+
         if volume_overrides and muscolo in volume_overrides:
             volume_totale_target = volume_overrides[muscolo]
             print(
@@ -748,8 +739,8 @@ class Model:
 
     def _crea_fullbody_principiante(self, context, muscolo_target, giorni=3, volume_overrides=None, settimana=1):
         """Crea una settimana di allenamento Full Body per atleti principianti."""
-        MIN_DIRECT_SETS = 4  # Meno volume diretto richiesto per i principianti
-        settimana_numero = settimana  # <-- CORREZIONE: usa il parametro settimana
+        MIN_DIRECT_SETS = 4
+        settimana_numero = settimana  # <-- CORREZIONE IMPORTANTE
         oggi = datetime.now()
         days = [WorkoutDay(id_giorno=i + 1, settimana=settimana_numero, split_type="Full Body", data=oggi) for i in
                 range(giorni)]
@@ -851,26 +842,3 @@ class Model:
             return {}
 
 
-# ===============================================================
-# Esempio di Utilizzo
-# ===============================================================
-if __name__ == "__main__":
-    model = Model()
-
-    print("********** GENERAZIONE SCHEDA FULL BODY INTERMEDIO 3 GIORNI - FOCUS PETTO **********\n")
-    scheda_intermedio_3 = model.getSchedaFullBodyIntermedio("Palestra Completa", "Petto", giorni=3)
-    print(scheda_intermedio_3)
-
-    print("\n\n********** GENERAZIONE SCHEDA FULL BODY INTERMEDIO 4 GIORNI - FOCUS SPALLE **********\n")
-    scheda_intermedio_4 = model.getSchedaFullBodyIntermedio("Palestra Completa", "Spalle", giorni=4)
-    print(scheda_intermedio_4)
-
-    print("\n\n********** GENERAZIONE SCHEDA FULL BODY INTERMEDIO 4 GIORNI - FOCUS QUADRICIPITI **********\n")
-    scheda_intermedio_4_quad = model.getSchedaFullBodyIntermedio("Palestra Completa", "Quadricipiti", giorni=4)
-    print(scheda_intermedio_4_quad)
-
-    print("\n\n********** TEST CON VOLUME OVERRIDES **********\n")
-    volume_overrides = {"Petto": 15, "Schiena": 18, "Spalle": 12}
-    scheda_con_override = model.getSchedaFullBodyIntermedio("Palestra Completa", "Petto", giorni=3,
-                                                            volume_overrides=volume_overrides)
-    print(scheda_con_override)

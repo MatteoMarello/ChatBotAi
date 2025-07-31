@@ -26,7 +26,7 @@ class NutritionService:
         self.api_key = (
                 api_key or
                 os.getenv("OPENROUTER_API_KEY") or
-                "keydainserire"
+                "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"
         )
 
         if not self.api_key:
@@ -178,22 +178,3 @@ class NutritionCache:
         self.cache.clear()
 
 
-# ESEMPIO D'USO E TEST
-async def test_nutrition_service():
-    """Funzione di test per verificare il servizio"""
-    service = NutritionService()
-
-    try:
-        context = "Uomo, 30 anni, 75kg, obiettivo: perdita peso, TDEE: 2200 kcal"
-        user_message = "Che colazione mi consigli per perdere peso?"
-
-        response = await service.get_nutrition_advice(user_message, context)
-        print("Risposta del coach:", response)
-
-    except Exception as e:
-        print(f"Errore durante il test: {e}")
-
-
-if __name__ == "__main__":
-    # Per testare il servizio
-    asyncio.run(test_nutrition_service())
