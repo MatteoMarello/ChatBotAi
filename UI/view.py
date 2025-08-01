@@ -136,6 +136,13 @@ class View:
             icon=ft.Icons.ARROW_FORWARD
         )
 
+        self.btn_prosegui_riposo = ft.ElevatedButton(
+            text="Prosegui",
+            on_click=self.controller.prosegui_al_prossimo_giorno,
+            style=self.button_style,
+            icon=ft.Icons.ARROW_FORWARD
+        )
+
     def _create_layout(self):
         """Crea il layout principale dell'applicazione."""
         # Navigation Drawer
@@ -227,11 +234,21 @@ class View:
             width=800
         )
 
-        # --- NUOVO CODICE ---
+        self.readiness_view = ft.Container(
+            content=ft.Column(
+                controls=[],  # Verrà popolato dinamicamente
+                spacing=12,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER
+            ),
+            padding=20,
+            visible=False  # Inizialmente nascosto
+        )
+
         main_content = ft.Container(
             content=ft.Stack(
                 [
                     self.config_view,
+                    self.readiness_view, # Aggiunto qui
                     self.scheda_container,
                     self.progress_view,
                     self.nutrition_view
@@ -240,6 +257,7 @@ class View:
             expand=True,
             alignment=ft.alignment.center
         )
+
 
         # Nascondi viste non iniziali
         self.progress_view.visible = False
@@ -250,10 +268,15 @@ class View:
 
     def crea_card_esercizio(self, esercizio: Esercizio, log: dict, settimana: int, giorno: int):
         """Crea una card per l'esercizio."""
-        rir_map = {1: 4, 2: 3, 3: 2}
-        rir_obiettivo = rir_map.get(settimana, "N/D")
+        rir_map = {1: 4, 2: 3, 3: 2, 4: 5} # Aggiunto 4 per deload
+        rir_obiettivo_base = rir_map.get(settimana, "N/D")
 
-        # Header esercizio
+        # --- NUOVA LOGICA PER RIR AGGIUSTATO ---
+        rir_adjustment = log.get("rir_adjustment", 0)
+        rir_obiettivo_finale = rir_obiettivo_base + rir_adjustment
+        rir_display_text = f"RIR: {rir_obiettivo_finale}"
+        if rir_adjustment > 0:
+            rir_display_text += f" ({rir_obiettivo_base}+{rir_adjustment})"
         header_row = ft.Row([
             ft.Icon(ft.Icons.FITNESS_CENTER, color=self.colors['primary'], size=20),
             ft.Text(esercizio.nome,
@@ -262,7 +285,7 @@ class View:
                     color=self.colors['text_primary'],
                     expand=True),
             ft.Container(
-                content=ft.Text(f"RIR: {rir_obiettivo}",
+                content=ft.Text(rir_display_text,  # Usa il testo aggiornato
                                 size=12,
                                 color=ft.Colors.WHITE,
                                 weight=ft.FontWeight.BOLD),
@@ -472,7 +495,6 @@ class View:
 
     def visualizza_giorno(self, giorno_allenamento: WorkoutDay, settimana_num: int, is_deload: bool = False):
         """Visualizza il giorno di allenamento."""
-        # Pulisci i controlli della colonna interna
         self.scheda_container.content.controls.clear()
 
         # Titolo con indicazione se è settimana di scarico
@@ -482,60 +504,108 @@ class View:
 
         title = ft.Text(
             f"{week_label} - GIORNO {giorno_allenamento.id_giorno}",
-            size=20,
-            weight=ft.FontWeight.BOLD,
-            color=self.colors['text_primary']
+            size=20, weight=ft.FontWeight.BOLD, color=self.colors['text_primary']
         )
-
         subtitle = ft.Text(
             f"Split: {giorno_allenamento.split_type}",
-            size=16,
-            color=self.colors['text_secondary']
+            size=16, color=self.colors['text_secondary']
         )
-
         self.scheda_container.content.controls.extend([title, subtitle])
 
-        if not giorno_allenamento.esercizi:
-            # Giorno di riposo
-            rest_card = ft.Container(
-                content=ft.Column([
-                    ft.Icon(ft.Icons.HOTEL, size=40, color=self.colors['text_secondary']),
-                    ft.Text("Giorno di Riposo",
-                            size=18,
-                            weight=ft.FontWeight.BOLD,
-                            color=self.colors['text_primary']),
-                    ft.Text("Rilassati e recupera!",
-                            color=self.colors['text_secondary'])
-                ], spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                padding=40,
-                bgcolor=self.colors['surface'],
-                border_radius=12,
-                alignment=ft.alignment.center,
-                margin=ft.margin.only(bottom=16)
-            )
-            self.scheda_container.content.controls.append(rest_card)
-        else:
-            # Esercizi
-            for esercizio in giorno_allenamento.esercizi:
-                log_esercizio = giorno_allenamento.performance_log.get(esercizio.id, {})
-                card = self.crea_card_esercizio(esercizio, log_esercizio, settimana_num, giorno_allenamento.id_giorno)
-                self.scheda_container.content.controls.append(card)
+        # Mostra il messaggio di aggiustamento se presente
+        if giorno_allenamento.adjustment_message:
+            category_color = self.colors['success']  # Default GREEN
+            if "GIALLO" in giorno_allenamento.adjustment_message:
+                category_color = self.colors['warning']
+            elif "ROSSO" in giorno_allenamento.adjustment_message:
+                category_color = self.colors['error']
 
-            # Pulsante salva
-            save_button_container = ft.Container(
-                content=self.btn_salva_performance,
-                padding=ft.padding.symmetric(vertical=20),
-                alignment=ft.alignment.center
+            adjustment_card = ft.Container(
+                content=ft.Text(giorno_allenamento.adjustment_message, color=ft.Colors.BLACK, size=14),
+                padding=15, bgcolor=category_color, border_radius=8, margin=ft.margin.only(bottom=16)
             )
-            self.scheda_container.content.controls.append(save_button_container)
+            self.scheda_container.content.controls.append(adjustment_card)
 
-        # Mostra la scheda e nascondi la config
-        print(f"DEBUG: Impostando visibilità - config: False, scheda: True, progress: False")
-        self.config_view.visible = False
+        # Crea le card per gli esercizi
+        for esercizio in giorno_allenamento.esercizi:
+            log_esercizio = giorno_allenamento.performance_log.get(esercizio.id, {})
+            card = self.crea_card_esercizio(esercizio, log_esercizio, settimana_num, giorno_allenamento.id_giorno)
+            self.scheda_container.content.controls.append(card)
+
+        # Aggiungi sempre il pulsante per salvare
+        save_button_container = ft.Container(
+            content=self.btn_salva_performance,
+            padding=ft.padding.symmetric(vertical=20),
+            alignment=ft.alignment.center
+        )
+        self.scheda_container.content.controls.append(save_button_container)
+
+        # Attiva la vista della scheda
         self.scheda_container.visible = True
-        self.progress_view.visible = False
         self.update_view()
-        print(f"DEBUG: Vista aggiornata")
+
+    def mostra_schermata_readiness(self, muscoli_del_giorno: List[str]):
+        """Crea e visualizza la schermata per l'input di prontezza giornaliera."""
+        controls = self.readiness_view.content.controls
+        controls.clear()
+
+        def create_slider(label: str, default_value: int = 4):
+            return ft.Column([
+                ft.Text(label, color=self.colors['text_primary']),
+                ft.Slider(min=1, max=5, divisions=4, value=default_value, label="{value}")
+            ])
+
+        # CORREZIONE: Impostati valori di default più sensati
+        self.slider_energia = create_slider("Livello di Energia (1=Basso, 5=Alto)", default_value=4)
+        self.slider_sonno = create_slider("Qualità del Sonno (1=Pessima, 5=Ottima)", default_value=4)
+        self.slider_doms = create_slider(f"Dolore Muscolare (DOMS) per: {', '.join(muscoli_del_giorno)}",
+                                         default_value=2)
+        self.slider_dolori_articolari = create_slider("Dolore Articolare (1=Nessuno, 5=Forte)", default_value=1)
+        self.switch_tempo = ft.Switch(label="Ho poco tempo a disposizione", value=False)
+
+        btn_inizia_allenamento = ft.ElevatedButton(
+            text="Inizia Allenamento",
+            on_click=self.controller.handle_readiness_submitted,
+            style=self.button_style,
+            icon=ft.Icons.PLAY_ARROW
+        )
+
+        controls.extend([
+            ft.Text("Come ti senti oggi?", size=22, weight=ft.FontWeight.BOLD, color=self.colors['text_primary']),
+            ft.Text("Sii onesto, il tuo allenamento si adatterà di conseguenza.", color=self.colors['text_secondary']),
+            ft.Container(height=20),
+            ft.Container(
+                content=ft.Column([
+                    self.slider_energia,
+                    self.slider_sonno,
+                    self.slider_doms,
+                    self.slider_dolori_articolari,
+                    self.switch_tempo,
+                    ft.Container(height=20),
+                    btn_inizia_allenamento
+                ], spacing=15, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                width=450,
+                padding=20,
+                bgcolor=self.colors['surface'],
+                border_radius=12
+            )
+        ])
+
+        # Il controller si occuperà di rendere questa vista visibile
+        self.controller._activate_view('readiness')
+
+    def get_readiness_data(self) -> Dict:
+        """Estrae i dati dalla schermata di prontezza."""
+        try:
+            return {
+                "energy": int(self.slider_energia.controls[1].value),
+                "sleep": int(self.slider_sonno.controls[1].value),
+                "soreness": int(self.slider_doms.controls[1].value),
+                "joint_pain": int(self.slider_dolori_articolari.controls[1].value),
+                "time_is_limited": self.switch_tempo.value
+            }
+        except (ValueError, AttributeError):
+            return {}
 
     def visualizza_schermata_doms(self, muscoli: List[str]):
         """Visualizza la schermata per i DOMS."""
@@ -644,7 +714,8 @@ class View:
             report_container
         ])
 
-        self.config_view.visible = True
+        # --- CORREZIONE: Imposta correttamente la visibilità per mostrare SOLO il report ---
+        self.config_view.visible = False  # Imposta a False
         self.scheda_container.visible = True
         self.progress_view.visible = False
         self.update_view()

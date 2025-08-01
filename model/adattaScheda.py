@@ -4,6 +4,7 @@ from typing import Dict, List, Tuple, Optional
 import math
 from collections import defaultdict
 
+
 # Importa le tue classi esistenti
 from model.esercizio import Esercizio
 from model.workoutday import WorkoutDay
@@ -26,7 +27,7 @@ class PerformanceData:
         mmc (int): Mind Muscle Connection, un valore da 1 a 3 che indica la qualità della connessione mente-muscolo.
         pump (int): Il livello di pump muscolare percepito, da 1 a 3.
         dolori_articolari (int): Il livello di dolore articolare percepito, da 1 a 3.
-        sets (List[Tuple[float, int, str]]): Una lista di tuple, dove ogni tupla rappresenta una serie e contiene (carico, ripetizioni, rep_range_target).
+        sets (List[Tuple[float, int, str]]): Una lista di tuple, where ogni tupla rappresenta una serie e contiene (carico, ripetizioni, rep_range_target).
         rsm (float): Rapporto Stimolo-Fatica, calcolato come (MMC + Pump). Valore più alto indica uno stimolo migliore.
         fi (float): Fattore di Interferenza, indica quanto l'esercizio è stato "fastidioso" o ha generato fatica non produttiva.
         sfr (float): Stimulus-to-Fatigue Ratio, il rapporto tra lo stimolo (RSM) e la fatica (FI). È l'indicatore chiave per valutare l'efficacia di un esercizio.
@@ -128,6 +129,7 @@ class TrainingAlgorithm:
     sfr_settimana_3: Dict[int, float] = field(default_factory=dict)
     sfr_medio_finale: Dict[int, float] = field(default_factory=dict)
     rir_progressivo: Dict[int, int] = field(default_factory=lambda: {1: 4, 2: 3, 3: 2})
+    exercise_details_map: Dict[int, Esercizio] = field(default_factory=dict)
 
     def aggiungi_performance(self, settimana: int, performance: PerformanceData):
         """
@@ -420,38 +422,60 @@ class TrainingAlgorithm:
 
         return self.sfr_medio_finale
 
-    def get_ranking_esercizi(self) -> List[Tuple[int, float]]:
+    def analizza_sfr_per_gruppo_muscolare(self) -> Dict[str, Dict[str, Optional[Tuple[int, float]]]]:
         """
-        Restituisce una classifica degli esercizi dal migliore (SFR più alto) al peggiore (SFR più basso).
-        Questa classifica è la base per le raccomandazioni del mesociclo successivo.
+        Analizza l'SFR medio finale e raggruppa gli esercizi per gruppo muscolare.
+        Per ogni gruppo, identifica l'esercizio con SFR più alto ('migliore') e,
+        se disponibile, quello con SFR più basso ('peggiore').
+        Questo metodo è la base per il nuovo report di fine mesociclo.
 
         Returns:
-            List[Tuple[int, float]]: Una lista ordinata di tuple (esercizio_id, sfr_medio_finale).
+            Dict[str, Dict[str, Optional[Tuple[int, float]]]]: Un dizionario che mappa
+            un gruppo muscolare a un altro dizionario con le chiavi 'migliore' e 'peggiore'.
+            'peggiore' può essere None se è stato eseguito un solo esercizio.
+            Esempio:
+            {
+                'Petto': {
+                    'migliore': (1, 5.0),  # (esercizio_id, sfr_medio)
+                    'peggiore': (2, 3.5)
+                },
+                'Schiena': {
+                    'migliore': (4, 4.8),
+                    'peggiore': None
+                }
+            }
         """
-        sfr_medio = self.calcola_sfr_medio_finale()
-        return sorted(sfr_medio.items(), key=lambda x: x[1], reverse=True)
+        # Calcola l'SFR medio finale se non è già stato fatto
+        sfr_finali = self.calcola_sfr_medio_finale()
+        if not sfr_finali or not self.exercise_details_map:
+            print("Dati SFR o mappa esercizi mancanti per l'analisi.")
+            return {}
 
-    def get_esercizio_peggiore(self) -> Optional[int]:
-        """
-        Identifica l'esercizio con l'SFR medio finale più basso.
-        Questo esercizio è il principale candidato alla sostituzione nel prossimo mesociclo.
+        # Raggruppa gli esercizi e i loro SFR per muscolo primario
+        sfr_per_muscolo = defaultdict(list)
+        for esercizio_id, sfr in sfr_finali.items():
+            esercizio = self.exercise_details_map.get(esercizio_id)
+            if esercizio:
+                muscolo = esercizio.muscolo_primario
+                sfr_per_muscolo[muscolo].append((esercizio_id, sfr))
 
-        Returns:
-            Optional[int]: L'ID dell'esercizio peggiore, o None se non ci sono dati.
-        """
-        ranking = self.get_ranking_esercizi()
-        return ranking[-1][0] if ranking else None
+        # Analizza ogni gruppo muscolare
+        risultati_analisi = {}
+        for muscolo, esercizi in sfr_per_muscolo.items():
+            if not esercizi:
+                continue
 
-    def get_esercizio_migliore(self) -> Optional[int]:
-        """
-        Identifica l'esercizio con l'SFR medio finale più alto.
-        A questo esercizio dovrebbe essere data priorità nel prossimo mesociclo.
+            # Ordina gli esercizi in base all'SFR, dal più alto al più basso
+            esercizi.sort(key=lambda x: x[1], reverse=True)
 
-        Returns:
-            Optional[int]: L'ID dell'esercizio migliore, o None se non ci sono dati.
-        """
-        ranking = self.get_ranking_esercizi()
-        return ranking[0][0] if ranking else None
+            migliore = esercizi[0]
+            peggiore = esercizi[-1] if len(esercizi) >= 2 else None
+
+            risultati_analisi[muscolo] = {
+                'migliore': migliore,
+                'peggiore': peggiore
+            }
+        return risultati_analisi
 
     # ===== UTILITY =====
 
@@ -493,143 +517,122 @@ class TrainingAlgorithm:
         return sum(rsm_values) / len(rsm_values) if rsm_values else 0.0
 
     # ===== REPORT =====
-
     def genera_report_completo(self) -> str:
         """
         Crea un report testuale completo che riassume l'analisi dell'intero mesociclo.
-        Include SFR, miglioramenti di performance, ranking finale e raccomandazioni.
-
-        Returns:
-            str: Una stringa formattata contenente il report completo.
+        Il report ora si concentra sul confronto degli esercizi all'interno di ogni
+        gruppo muscolare, evidenziando il migliore e il peggiore in base all'SFR.
         """
         report = "=" * 60 + "\n"
-        report += "           REPORT ANALISI TRAINING ALGORITHM\n"
+        report += "      ANALISI DI FINE MESOCICLO PER GRUPPO MUSCOLARE\n"
         report += "=" * 60 + "\n\n"
 
-        # Settimana 1
-        report += "📊 SETTIMANA 1 - SFR INIZIALE\n"
-        report += "-" * 40 + "\n"
-        for esercizio_id, sfr in self.sfr_settimana_1.items():
-            report += f"Esercizio {esercizio_id}: SFR = {sfr:.2f}\n"
-        report += "\n"
+        analisi_per_muscolo = self.analizza_sfr_per_gruppo_muscolare()
 
-        # Settimana 2
-        report += "📈 SETTIMANA 2 - MIGLIORAMENTO PERFORMANCE\n"
-        report += "-" * 40 + "\n"
-        miglioramenti = self.calcola_miglioramento_performance_settimana_2()
-        punti = self.calcola_punti_performance_settimana_2()
-        for esercizio_id, miglioramento in miglioramenti.items():
-            punto = punti.get(esercizio_id, 0)
-            report += f"Esercizio {esercizio_id}: {miglioramento:+.1f}% → {punto:+d} punti\n"
-        report += "\n"
+        if not analisi_per_muscolo:
+            return "Nessun dato sufficiente per generare un'analisi comparativa degli esercizi. \n\nAssicurati di aver completato almeno due esercizi diversi per gruppo muscolare nelle settimane 1 e 3 per un'analisi completa."
 
-        # Settimana 3
-        report += "📊 SETTIMANA 3 - SFR FINALE\n"
-        report += "-" * 40 + "\n"
-        for esercizio_id, sfr in self.sfr_settimana_3.items():
-            report += f"Esercizio {esercizio_id}: SFR = {sfr:.2f}\n"
-        report += "\n"
+        report += "💡 RACCOMANDAZIONI PER IL PROSSIMO MESOCICLO\n"
+        report += "-" * 50 + "\n"
+        report += "L'analisi si basa sullo Stimulus-to-Fatigue Ratio (SFR): un valore più alto indica un esercizio più efficace per te.\n\n"
 
-        # Ranking finale
-        report += "🏆 RANKING FINALE ESERCIZI\n"
-        report += "-" * 40 + "\n"
-        ranking = self.get_ranking_esercizi()
-        for i, (esercizio_id, sfr_medio) in enumerate(ranking, 1):
-            report += f"{i}. Esercizio {esercizio_id}: SFR medio = {sfr_medio:.2f}\n"
-        report += "\n"
+        for muscolo, dati in analisi_per_muscolo.items():
+            report += f"--- {muscolo.upper()} ---\n"
 
-        # Raccomandazioni
-        report += "💡 RACCOMANDAZIONI MESOCICLO SUCCESSIVO\n"
-        report += "-" * 40 + "\n"
-        migliore = self.get_esercizio_migliore()
-        peggiore = self.get_esercizio_peggiore()
+            # Esercizio migliore (ci sarà sempre se il muscolo è nell'analisi)
+            id_migliore, sfr_migliore = dati['migliore']
+            esercizio_migliore_obj = self.exercise_details_map.get(id_migliore)
+            nome_migliore = esercizio_migliore_obj.nome if esercizio_migliore_obj else f"Esercizio ID {id_migliore}"
+            report += f"✅ Esercizio Più Efficace: {nome_migliore}\n"
+            report += f"   (SFR Medio: {sfr_migliore:.2f})\n"
 
-        if migliore:
-            report += f"✅ Priorità serie: Esercizio {migliore} (SFR: {self.sfr_medio_finale[migliore]:.2f})\n"
-        if peggiore:
-            report += f"❌ Candidato sostituzione: Esercizio {peggiore} (SFR: {self.sfr_medio_finale[peggiore]:.2f})\n"
+            # Esercizio peggiore (potrebbe non esserci)
+            if dati['peggiore']:
+                id_peggiore, sfr_peggiore = dati['peggiore']
+                esercizio_peggiore_obj = self.exercise_details_map.get(id_peggiore)
+                nome_peggiore = esercizio_peggiore_obj.nome if esercizio_peggiore_obj else f"Esercizio ID {id_peggiore}"
 
-        report += "\n" + "=" * 60 + "\n"
+                report += f"❌ Esercizio Meno Efficace: {nome_peggiore}\n"
+                report += f"   (SFR Medio: {sfr_peggiore:.2f})\n\n"
+                report += f"-> Raccomandazione: Nel prossimo blocco, mantieni '{nome_migliore}' e considera di sostituire '{nome_peggiore}' con una variante per ottimizzare lo stimolo.\n"
+            else:
+                report += "\n-> Nota: È stato eseguito un solo tipo di esercizio per questo muscolo. Per un'analisi comparativa, includi almeno due varianti nel prossimo ciclo.\n"
+
+            report += "-" * 50 + "\n\n"
+
+        report += "=" * 60 + "\n"
         return report
+
 
 # ===== ESEMPIO DI UTILIZZO =====
 
 def esempio_utilizzo():
     """
-    Funzione di esempio che simula un intero ciclo di 3 settimane per dimostrare
-    il funzionamento completo dell'algoritmo, dalla raccolta dati alla generazione del report finale.
+    Funzione di esempio aggiornata che simula un ciclo per due gruppi muscolari (Petto e Schiena)
+    e dimostra la nuova analisi per gruppo muscolare.
     """
+    # Per questo esempio, definiamo una classe Esercizio fittizia.
+    # Nel tuo progetto reale, la importeresti da model.esercizio
+    from dataclasses import dataclass
+    @dataclass
+    class Esercizio:
+        id: int
+        nome: str
+        muscolo_primario: str
 
-    # Inizializza algoritmo
-    algo = TrainingAlgorithm()
+    # 1. Creare una mappa degli esercizi (nel tuo codice la recupereresti dal DB)
+    exercise_map = {
+        1: Esercizio(id=1, nome="Panca Piana Bilanciere", muscolo_primario="Petto"),
+        2: Esercizio(id=2, nome="Panca Inclinata Manubri", muscolo_primario="Petto"),
+        3: Esercizio(id=3, nome="Trazioni alla Sbarra", muscolo_primario="Schiena"),
+        4: Esercizio(id=4, nome="Rematore Bilanciere", muscolo_primario="Schiena")
+    }
 
-    # Simula dati settimana 1
-    print("📊 SETTIMANA 1 - Raccolta dati SFR...")
+    # 2. Inizializzare l'algoritmo passando la mappa degli esercizi
+    algo = TrainingAlgorithm(exercise_details_map=exercise_map)
 
-    # Esempio: 2 esercizi per il petto
-    # Panca Piana (ID: 1)
-    algo.aggiungi_performance(1, PerformanceData(
-        esercizio_id=1, giorno=1, settimana=1, muscolo_primario="Petto",
-        mmc=2, pump=2, dolori_articolari=1,
-        sets=[(100, 8, "6-8")]
-    ))
+    # --- SIMULAZIONE DATI SETTIMANA 1 ---
+    # Petto
+    algo.aggiungi_performance(1, PerformanceData(1, 1, 1, "Petto", mmc=3, pump=3, dolori_articolari=1,
+                                                 sets=[(100, 8, "6-8")]))
+    algo.aggiungi_performance(1, PerformanceData(2, 1, 1, "Petto", mmc=2, pump=2, dolori_articolari=2,
+                                                 sets=[(40, 10, "8-12")]))
+    # Schiena
+    algo.aggiungi_performance(1, PerformanceData(3, 2, 1, "Schiena", mmc=2, pump=1, dolori_articolari=1,
+                                                 sets=[(0, 8, "6-8")]))
+    algo.aggiungi_performance(1, PerformanceData(4, 2, 1, "Schiena", mmc=3, pump=2, dolori_articolari=1,
+                                                 sets=[(70, 10, "8-12")]))
 
-    # Panca Manubri (ID: 2)
-    algo.aggiungi_performance(1, PerformanceData(
-        esercizio_id=2, giorno=1, settimana=1, muscolo_primario="Petto",
-        mmc=3, pump=2, dolori_articolari=1,
-        sets=[(40, 10, "8-12")]
-    ))
+    # Calcolo necessario per la settimana 1
+    algo.calcola_sfr_settimana_1()
 
-    # Calcola SFR settimana 1
-    sfr_1 = algo.calcola_sfr_settimana_1()
-    print(f"SFR Settimana 1: {sfr_1}")
+    # --- SIMULAZIONE DATI SETTIMANA 2 (saltiamo i calcoli intermedi per brevità) ---
+    # Petto
+    algo.aggiungi_performance(2, PerformanceData(1, 1, 2, "Petto", mmc=3, pump=3, dolori_articolari=1,
+                                                 sets=[(102.5, 8, "6-8")]))
+    algo.aggiungi_performance(2, PerformanceData(2, 1, 2, "Petto", mmc=2, pump=2, dolori_articolari=2,
+                                                 sets=[(40, 11, "8-12")]))
+    # Schiena
+    algo.aggiungi_performance(2, PerformanceData(3, 2, 2, "Schiena", mmc=2, pump=1, dolori_articolari=1,
+                                                 sets=[(0, 9, "6-8")]))
+    algo.aggiungi_performance(2, PerformanceData(4, 2, 2, "Schiena", mmc=3, pump=2, dolori_articolari=1,
+                                                 sets=[(72.5, 10, "8-12")]))
 
-    # Simula DOMS per settimana 2
-    algo.aggiungi_doms(2, DOMSData(muscolo="Petto", giorno=1, settimana=2, doms_value=2))
+    # --- SIMULAZIONE DATI SETTIMANA 3 ---
+    # Petto
+    algo.aggiungi_performance(3, PerformanceData(1, 1, 3, "Petto", mmc=3, pump=2, dolori_articolari=1,
+                                                 sets=[(102.5, 7, "6-8")]))
+    algo.aggiungi_performance(3, PerformanceData(2, 1, 3, "Petto", mmc=2, pump=1, dolori_articolari=3,
+                                                 sets=[(40, 10, "8-12")]))
+    # Schiena
+    algo.aggiungi_performance(3, PerformanceData(3, 2, 3, "Schiena", mmc=1, pump=1, dolori_articolari=2,
+                                                 sets=[(0, 8, "6-8")]))
+    algo.aggiungi_performance(3, PerformanceData(4, 2, 3, "Schiena", mmc=3, pump=3, dolori_articolari=1,
+                                                 sets=[(75, 9, "8-12")]))
 
-    # Previsione serie settimana 2
-    previsione, _ = algo.calcola_previsione_serie_settimana_2("Petto", "intermedio")
-    print(f"Previsione serie settimana 2: {previsione}")
+    # Calcolo necessario per la settimana 3
+    algo.calcola_sfr_settimana_3()
 
-    # Simula dati settimana 2
-    print("\n📈 SETTIMANA 2 - Raccolta dati performance...")
-
-    algo.aggiungi_performance(2, PerformanceData(
-        esercizio_id=1, giorno=1, settimana=2, muscolo_primario="Petto",
-        mmc=2, pump=2, dolori_articolari=1,
-        sets=[(102.5, 8, "6-8")]  # Leggero miglioramento
-    ))
-
-    algo.aggiungi_performance(2, PerformanceData(
-        esercizio_id=2, giorno=1, settimana=2, muscolo_primario="Petto",
-        mmc=3, pump=2, dolori_articolari=1,
-        sets=[(42, 10, "8-12")]  # Buon miglioramento
-    ))
-
-    # Calcola serie settimana 3
-    serie_3 = algo.calcola_serie_settimana_3("Petto")
-    print(f"Serie settimana 3: {serie_3}")
-
-    # Simula dati settimana 3
-    print("\n📊 SETTIMANA 3 - Raccolta dati finali...")
-
-    algo.aggiungi_performance(3, PerformanceData(
-        esercizio_id=1, giorno=1, settimana=3, muscolo_primario="Petto",
-        mmc=2, pump=1, dolori_articolari=2,  # Peggioramento sensazioni, più dolori
-        sets=[(100, 7, "6-8")]  # Peggioramento performance
-    ))
-
-    algo.aggiungi_performance(3, PerformanceData(
-        esercizio_id=2, giorno=1, settimana=3, muscolo_primario="Petto",
-        mmc=3, pump=2, dolori_articolari=1,
-        sets=[(44, 10, "8-12")]  # Ancora miglioramento
-    ))
-
-    # Calcola SFR settimana 3
-    sfr_3 = algo.calcola_sfr_settimana_3()
-    print(f"SFR Settimana 3: {sfr_3}")
-
-    # Analisi finale
-    print("\n🏆 ANALISI FINALE")
+    # --- ANALISI FINALE E REPORT ---
+    print("\n🏆 ANALISI FINALE E RACCOMANDAZIONI 🏆")
     print(algo.genera_report_completo())

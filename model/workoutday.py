@@ -13,6 +13,7 @@ class WorkoutDay:
     esercizi: list[Esercizio] = field(default_factory=list)
     performance_log: dict[int, dict] = field(default_factory=dict)
     ordine_muscoli: dict[str, int] = field(default_factory=dict)
+    adjustment_message: str = ""  # Messaggio dall'algoritmo di autoregolazione
 
     def aggiungi_esercizio(self, esercizio: Esercizio, serie: int, reps: list[str], ordine_muscolo: int = None):
         """

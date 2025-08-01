@@ -1,6 +1,7 @@
 import flet as ft
 from typing import Optional, Dict, Any
 from model.nutrition_service import NutritionService, NutritionCache
+import re
 
 
 class NutritionView(ft.Container):
@@ -29,7 +30,8 @@ class NutritionView(ft.Container):
             'border': '#475569',
             'success': '#10b981',
             'warning': '#f59e0b',
-            'error': '#ef4444'
+            'error': '#ef4444',
+            'safety': '#dc2626'  # Rosso per avvertenze di sicurezza
         }
 
         # Dati utente
@@ -37,23 +39,39 @@ class NutritionView(ft.Container):
 
         # Stato della chat
         self.is_loading = False
+        self.terms_accepted = False  # Controllo accettazione termini
+
+        # Flag per verificare se sono stati mostrati i disclaimer
+        self.medical_disclaimer_shown = False
+        self.safety_terms_shown = False
 
         # Componenti UI
         self._create_tabs()
+        self._create_disclaimer_section()
         self._create_tdee_section()
         self._create_chat_section()
 
         # Layout principale
         self.content = ft.Column(
             controls=[
-                ft.Text("Nutrizione & Alimentazione 🍎",
-                        size=24,
-                        weight=ft.FontWeight.BOLD,
-                        color=self.colors['text_primary']),
-                ft.Divider(color=self.colors['border']),
+                ft.Container(
+                    content=ft.Row([
+                        ft.Icon(ft.Icons.RESTAURANT_MENU, color=self.colors['primary'], size=28),
+                        ft.Column([
+                            ft.Text("Nutrition App",
+                                    size=22,
+                                    weight=ft.FontWeight.BOLD,
+                                    color=self.colors['text_primary']),
+                            ft.Text("Educazione alimentare e calcolo TDEE",
+                                    size=12,
+                                    color=self.colors['text_secondary'])
+                        ], spacing=2)
+                    ], spacing=15),
+                    padding=ft.padding.only(bottom=20)
+                ),
                 self.tabs
             ],
-            spacing=20,
+            spacing=10,
             expand=True
         )
 
@@ -63,18 +81,164 @@ class NutritionView(ft.Container):
             selected_index=0,
             animation_duration=300,
             tabs=[
-                ft.Tab(text="Calcolatore TDEE", icon=ft.Icons.CALCULATE),
-                ft.Tab(text="Coach Nutrizionale", icon=ft.Icons.CHAT),
+                ft.Tab(text="⚠️ Disclaimer", icon=ft.Icons.WARNING),
+                ft.Tab(text="📊 Calcolatore TDEE", icon=ft.Icons.CALCULATE),
+                ft.Tab(text="🤖 Assistant (Beta)", icon=ft.Icons.CHAT),
             ],
-            expand=True
+            expand=True,
+            on_change=self._on_tab_change
         )
 
+    def _on_tab_change(self, e):
+        """Gestisce il cambio di tab"""
+        # Se l'utente prova ad andare al chat senza aver accettato i termini
+        if e.control.selected_index == 2 and not self.terms_accepted:
+            e.control.selected_index = 0  # Ritorna al disclaimer
+            self._show_snackbar(
+                "⚠️ Devi accettare i termini di sicurezza prima di usare l'assistant!",
+                self.colors['error']
+            )
+            self.update()
+
+    def _create_disclaimer_section(self):
+        """Crea la sezione disclaimer semplificata"""
+
+        # Checkbox per accettazione termini
+        self.terms_checkbox = ft.Checkbox(
+            label="Ho letto e accetto i termini d'uso",
+            value=False,
+            on_change=self._on_terms_change
+        )
+
+        # Pulsante per procedere
+        self.proceed_btn = ft.ElevatedButton(
+            text="Inizia",
+            icon=ft.Icons.ARROW_FORWARD,
+            disabled=True,
+            on_click=self._proceed_to_app,
+            style=ft.ButtonStyle(
+                bgcolor=self.colors['success'],
+                padding=20
+            )
+        )
+
+        disclaimer_content = ft.Column([
+            # AVVERTENZA PRINCIPALE - Semplificata
+            ft.Container(
+                content=ft.Column([
+                    ft.Row([
+                        ft.Icon(ft.Icons.INFO, color=self.colors['primary'], size=24),
+                        ft.Text("Informazioni Importanti",
+                                size=18,
+                                weight=ft.FontWeight.BOLD,
+                                color=self.colors['text_primary'])
+                    ], spacing=10),
+
+                    ft.Text(
+                        "Questa app fornisce informazioni educative sulla nutrizione. "
+                        "Non sostituisce il parere di medici o nutrizionisti qualificati.",
+                        size=14,
+                        color=self.colors['text_primary']
+                    ),
+                ], spacing=10),
+                bgcolor=self.colors['surface_light'],
+                padding=20,
+                border_radius=10,
+                border=ft.border.all(1, self.colors['primary'])
+            ),
+
+            ft.Container(height=20),
+
+            # PUNTI ESSENZIALI - Ridotti
+            ft.Container(
+                content=ft.Column([
+                    ft.Text("⚠️ Consulta un professionista per:",
+                            size=14,
+                            weight=ft.FontWeight.BOLD,
+                            color=self.colors['warning']),
+                    ft.Container(height=5),
+
+                    *[ft.Text(f"• {item}", size=13, color=self.colors['text_primary'])
+                      for item in [
+                          "Allergie, intolleranze o patologie mediche",
+                          "Gravidanza, allattamento o età minorile",
+                          "Piani alimentari personalizzati",
+                          "Farmaci o integratori specifici"
+                      ]]
+                ], spacing=3),
+                bgcolor=self.colors['surface_light'],
+                padding=15,
+                border_radius=8,
+                border=ft.border.all(1, self.colors['warning'])
+            ),
+
+            ft.Container(height=30),
+
+            # CHECKBOX E PULSANTE
+            ft.Container(
+                content=ft.Column([
+                    self.terms_checkbox,
+                    ft.Container(height=15),
+                    self.proceed_btn
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                padding=20
+            )
+
+        ], spacing=15, scroll=ft.ScrollMode.AUTO)
+
+        # Assegna al primo tab
+        self.tabs.tabs[0].content = ft.Container(
+            content=disclaimer_content,
+            padding=20
+        )
+
+    def _on_terms_change(self, e):
+        """Gestisce l'accettazione dei termini"""
+        self.terms_accepted = e.control.value
+        self.proceed_btn.disabled = not self.terms_accepted
+        self.update()
+
+    def _proceed_to_app(self, e):
+        """Procede all'applicazione dopo l'accettazione dei termini"""
+        if self.terms_accepted:
+            self.tabs.selected_index = 1  # Vai al calcolatore TDEE
+            self._show_snackbar(
+                "✅ Termini accettati. Usa l'app responsabilmente!",
+                self.colors['success']
+            )
+        self.update()
+
     def _create_tdee_section(self):
-        """Sezione per il calcolo TDEE"""
-        # Input fields
-        self.weight_input = self._create_input_field("Peso (kg)", "70")
-        self.height_input = self._create_input_field("Altezza (cm)", "175")
-        self.age_input = self._create_input_field("Età", "30")
+        """Sezione per il calcolo TDEE con disclaimer aggiuntivi"""
+
+        # Disclaimer per il TDEE
+        tdee_disclaimer = ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Icon(ft.Icons.INFO, color=self.colors['primary'], size=20),
+                    ft.Text("ℹ️ Informazioni importanti sul calcolo TDEE",
+                            weight=ft.FontWeight.BOLD,
+                            color=self.colors['primary'])
+                ], spacing=10),
+                ft.Text(
+                    "• Il TDEE è una STIMA basata su formule standard\n"
+                    "• I valori reali possono variare del ±20% tra individui\n"
+                    "• Non considera condizioni mediche specifiche\n"
+                    "• Per piani personalizzati consulta un nutrizionista",
+                    size=12,
+                    color=self.colors['text_secondary']
+                )
+            ], spacing=8),
+            bgcolor=self.colors['surface'],
+            padding=15,
+            border_radius=8,
+            border=ft.border.all(1, self.colors['primary'])
+        )
+
+        # Input fields con validazione migliorata
+        self.weight_input = self._create_safe_input_field("Peso (kg)", "70", 30, 300)
+        self.height_input = self._create_safe_input_field("Altezza (cm)", "175", 100, 250)
+        self.age_input = self._create_safe_input_field("Età", "30", 16, 90)
 
         # Dropdowns
         self.activity_input = self._create_dropdown("Livello Attività", [
@@ -100,6 +264,20 @@ class NutritionView(ft.Container):
             value="male"
         )
 
+        # Age warning
+        self.age_warning = ft.Container(
+            content=ft.Text(
+                "⚠️ Se hai meno di 18 anni, consulta un pediatra prima di modificare la tua alimentazione",
+                size=12,
+                color=self.colors['warning'],
+                weight=ft.FontWeight.BOLD
+            ),
+            visible=False,
+            padding=10,
+            bgcolor=self.colors['surface'],
+            border_radius=5
+        )
+
         # Results display
         self.result_card = ft.Container(
             padding=20,
@@ -112,7 +290,7 @@ class NutritionView(ft.Container):
 
         # Calculate button
         self.calculate_btn = ft.ElevatedButton(
-            text="Calcola TDEE",
+            text="Calcola TDEE (Solo Stima)",
             icon=ft.Icons.CALCULATE,
             on_click=self.calculate_tdee,
             style=ft.ButtonStyle(
@@ -123,11 +301,13 @@ class NutritionView(ft.Container):
 
         # Assemble TDEE section
         tdee_content = ft.Column([
-            ft.Text("Calcola il tuo fabbisogno calorico",
+            ft.Text("📊 Calcolatore TDEE (Stima Educativa)",
                     size=18,
                     weight=ft.FontWeight.BOLD),
+            tdee_disclaimer,
             ft.Container(height=10),
             ft.Row([self.weight_input, self.height_input, self.age_input], spacing=20),
+            self.age_warning,
             ft.Container(height=10),
             ft.Text("Sesso", color=self.colors['text_secondary']),
             self.gender_selector,
@@ -140,129 +320,239 @@ class NutritionView(ft.Container):
             self.result_card
         ], spacing=15)
 
-        # Assegna al primo tab
-        self.tabs.tabs[0].content = ft.Container(
-            content=tdee_content,
+        # Assegna al secondo tab
+        # Assegna al secondo tab con scroll
+        self.tabs.tabs[1].content = ft.Container(
+            content=ft.Column([
+                ft.Text("📊 Calcolatore TDEE (Stima Educativa)",
+                        size=18,
+                        weight=ft.FontWeight.BOLD),
+                tdee_disclaimer,
+                ft.Container(height=10),
+                ft.Row([self.weight_input, self.height_input, self.age_input], spacing=20),
+                self.age_warning,
+                ft.Container(height=10),
+                ft.Text("Sesso", color=self.colors['text_secondary']),
+                self.gender_selector,
+                ft.Container(height=10),
+                # Dropdown in colonna per migliore usabilità
+                ft.Column([
+                    self.activity_input,
+                    ft.Container(height=10),
+                    self.goal_input
+                ], spacing=10),
+                ft.Container(height=20),
+                self.calculate_btn,
+                ft.Container(height=20),
+                self.result_card
+            ], spacing=15, scroll=ft.ScrollMode.AUTO),  # Aggiunto scroll qui
             padding=20
         )
 
     def _create_chat_section(self):
-        """Sezione per il chatbot nutrizionale"""
-        # Chat display
-        self.chat_display = ft.ListView(
-            auto_scroll=True,
-            expand=True,
-            spacing=10,
-            padding=10
-        )
+        """Sezione chat più pulita e spaziosa"""
 
-        # Loading indicator
+        # Loading indicator migliorato - DEFINITO PRIMA
         self.loading_indicator = ft.Container(
             content=ft.Row([
-                ft.ProgressRing(width=16, height=16, stroke_width=2),
-                ft.Text("Coach sta pensando...", size=12, italic=True)
-            ], spacing=10),
-            padding=10,
+                ft.ProgressRing(width=16, height=16, stroke_width=2, color=self.colors['primary']),
+                ft.Text("Elaborazione...", size=12, italic=True, color=self.colors['text_secondary'])
+            ], spacing=10, alignment=ft.MainAxisAlignment.CENTER),
+            padding=15,
             visible=False
         )
 
-        # User input
+        # Header semplificato
+        chat_header = ft.Container(
+            content=ft.Row([
+                ft.Icon(ft.Icons.SMART_TOY, color=self.colors['primary'], size=20),
+                ft.Text("Assistant Nutrizionale",
+                        size=16,
+                        weight=ft.FontWeight.BOLD,
+                        color=self.colors['text_primary']),
+                ft.Container(expand=True),  # Spacer
+                ft.Container(
+                    content=ft.Text(
+                        "🟢 Online" if self.nutrition_service else "🔴 Offline",
+                        size=11,
+                        color=self.colors['success'] if self.nutrition_service else self.colors['error']
+                    ),
+                    padding=ft.padding.symmetric(horizontal=8, vertical=4),
+                    bgcolor=self.colors['surface'],
+                    border_radius=12
+                )
+            ], spacing=10),
+            padding=ft.padding.only(bottom=10)
+        )
+
+        # Chat display più grande
+        self.chat_display = ft.ListView(
+            auto_scroll=True,
+            expand=True,
+            spacing=8,
+            padding=ft.padding.symmetric(horizontal=5, vertical=10)
+        )
+
+        # Container chat principale
+        chat_container = ft.Container(
+            content=ft.Column([
+                self.chat_display,
+                self.loading_indicator
+            ]),
+            border=ft.border.all(1, self.colors['border']),
+            border_radius=12,
+            padding=0,
+            expand=True,
+            bgcolor=self.colors['surface']
+        )
+
+        # Input area migliorata
         self.chat_input = ft.TextField(
-            hint_text="Scrivi la tua domanda nutrizionale...",
+            hint_text="Scrivi la tua domanda sulla nutrizione...",
             multiline=True,
             min_lines=1,
-            max_lines=3,
+            max_lines=4,
             expand=True,
-            on_submit=self.send_chat_message  # Invio con Enter
+            on_submit=self.send_chat_message,
+            border_color=self.colors['border'],
+            focused_border_color=self.colors['primary'],
+            bgcolor=self.colors['surface'],
+            border_radius=8
         )
 
-        # Send button
         self.send_btn = ft.IconButton(
-            icon=ft.Icons.SEND,
+            icon=ft.Icons.SEND_ROUNDED,
+            icon_color=self.colors['primary'],
             on_click=self.send_chat_message,
-            icon_size=30,
-            disabled=False
+            tooltip="Invia messaggio"
         )
 
-        # Status message
+        # Status message più discreto
         self.status_message = ft.Container(
             content=ft.Text(
-                "💡 Suggerimento: Calcola prima il tuo TDEE per ricevere consigli personalizzati!",
-                size=12,
+                "💡 Calcola il TDEE per consigli più precisi",
+                size=11,
                 color=self.colors['text_secondary'],
                 italic=True
             ),
-            padding=10,
+            padding=ft.padding.only(left=5, bottom=5),
             visible=True
         )
 
-        # API status indicator
-        api_status_color = self.colors['success'] if self.nutrition_service else self.colors['error']
-        api_status_text = "🟢 Coach AI disponibile" if self.nutrition_service else "🔴 Coach AI non disponibile (API key mancante)"
-
-        self.api_status = ft.Container(
-            content=ft.Text(api_status_text, size=11, color=api_status_color),
-            padding=ft.padding.only(left=10, right=10, bottom=5)
+        # Input row
+        input_row = ft.Container(
+            content=ft.Row([
+                self.chat_input,
+                self.send_btn
+            ], spacing=8),
+            padding=ft.padding.symmetric(horizontal=10, vertical=8),
+            bgcolor=self.colors['surface_light'],
+            border_radius=ft.border_radius.only(bottom_left=12, bottom_right=12)
         )
 
-        # Assemble chat section
+        # Layout finale più pulito
         chat_content = ft.Column([
-            ft.Text("Parla con il coach nutrizionale",
-                    size=18,
-                    weight=ft.FontWeight.BOLD),
-            self.api_status,
+            chat_header,
             self.status_message,
             ft.Container(
                 content=ft.Column([
-                    self.chat_display,
-                    self.loading_indicator
-                ]),
-                border=ft.border.all(1, self.colors['border']),
-                border_radius=8,
-                padding=10,
+                    chat_container,
+                    input_row
+                ], spacing=0),
                 expand=True
-            ),
-            ft.Row([self.chat_input, self.send_btn], spacing=10)
-        ], spacing=15, expand=True)
+            )
+        ], spacing=5, expand=True)
 
-        # Assegna al secondo tab
-        self.tabs.tabs[1].content = ft.Container(
+        # Assegna al terzo tab
+        self.tabs.tabs[2].content = ft.Container(
             content=chat_content,
             padding=20
         )
 
-    def _add_welcome_message(self):
-        """Aggiunge un messaggio di benvenuto alla chat"""
-        welcome_msg = """Ciao! 👋 Sono il tuo coach nutrizionale personale.
+    def _validate_user_input(self, e):
+        """Valida l'input dell'utente in tempo reale"""
+        text = e.control.value.lower()
 
-Posso aiutarti con:
-• Consigli su alimentazione e macro
-• Suggerimenti per pasti bilanciati  
-• Strategie per raggiungere i tuoi obiettivi
-• Risposte alle tue domande nutrizionali
+        # Parole chiave che richiedono attenzione
+        warning_keywords = [
+            'allergia', 'allergico', 'intolleranza', 'intollerante',
+            'diabete', 'diabetico', 'farmaco', 'medicina', 'malattia',
+            'gravidanza', 'incinta', 'bambino', 'figlio', 'pediatrico',
+            'digiuno', 'detox', 'perdere peso veloce', 'dimagrire veloce',
+            'pillole', 'integratori', 'supplementi'
+        ]
 
-Per consigli personalizzati, calcola prima il tuo TDEE nella tab precedente!"""
+        found_warnings = [kw for kw in warning_keywords if kw in text]
 
-        self._add_chat_message("Coach Nutrizionale", welcome_msg, is_user=False, is_welcome=True)
+        if found_warnings and len(text) > 10:  # Solo se il messaggio è abbastanza lungo
+            self.input_warning.content.value = (
+                f"⚠️ Hai menzionato: {', '.join(found_warnings)}. "
+                "Ricorda: per questi argomenti consulta un professionista!"
+            )
+            self.input_warning.visible = True
+        else:
+            self.input_warning.visible = False
 
-    def did_mount(self):
-        """Chiamato quando il controllo è aggiunto alla pagina"""
-        super().did_mount()
-        # Aggiungi il messaggio di benvenuto solo dopo che il controllo è montato
-        self._add_welcome_message()
+        self.update()
 
-    def _create_input_field(self, label: str, hint: str) -> ft.TextField:
-        return ft.TextField(
+    def _create_safe_input_field(self, label: str, hint: str, min_val: float, max_val: float) -> ft.TextField:
+        """Crea un campo input con validazione di sicurezza"""
+        field = ft.TextField(
             label=label,
-            hint_text=hint,
+            hint_text=f"{hint} (range: {min_val}-{max_val})",
             border_color=self.colors['border'],
             filled=True,
             bgcolor=self.colors['surface'],
             color=self.colors['text_primary'],
             keyboard_type=ft.KeyboardType.NUMBER,
             input_filter=ft.NumbersOnlyInputFilter(),
-            expand=True
+            expand=True,
+            on_change=lambda e: self._validate_numeric_input(e, min_val, max_val)
         )
+        return field
+
+    def _validate_numeric_input(self, e, min_val: float, max_val: float):
+        """Valida input numerici"""
+        try:
+            if e.control.value:
+                value = float(e.control.value)
+                if value < min_val or value > max_val:
+                    e.control.error_text = f"Valore deve essere tra {min_val} e {max_val}"
+                else:
+                    e.control.error_text = None
+
+                # Avvertenza per età minorenne
+                if e.control.label == "Età" and value < 18:
+                    self.age_warning.visible = True
+                elif e.control.label == "Età":
+                    self.age_warning.visible = False
+
+                self.update()
+        except ValueError:
+            e.control.error_text = "Inserisci un numero valido"
+            self.update()
+
+    def _add_enhanced_welcome_message(self):
+        """Messaggio di benvenuto più conciso"""
+        welcome_msg = """👋 Ciao! Sono il tuo Assistant Nutrizionale.
+    
+        🎯 **Posso aiutarti con:**
+        • Concetti base di nutrizione
+        • Informazioni sui macronutrienti  
+        • Principi di alimentazione equilibrata
+        • Lettura delle etichette alimentari
+    
+        ⚠️ **Importante**: Fornisco solo informazioni educative generali, non consigli medici personalizzati.
+    
+        💡 Calcola prima il tuo TDEE per ricevere suggerimenti più specifici!"""
+
+        self._add_chat_message("Assistant", welcome_msg, is_user=False, is_welcome=True)
+
+    def did_mount(self):
+        """Chiamato quando il controllo è aggiunto alla pagina"""
+        super().did_mount()
+        # Aggiungi il messaggio di benvenuto solo dopo che il controllo è montato
+        self._add_enhanced_welcome_message()
 
     def _create_dropdown(self, label: str, options: list) -> ft.Dropdown:
         return ft.Dropdown(
@@ -272,39 +562,55 @@ Per consigli personalizzati, calcola prima il tuo TDEE nella tab precedente!"""
             filled=True,
             bgcolor=self.colors['surface'],
             color=self.colors['text_primary'],
-            expand=True
+            width=300  # Usa width invece di expand per i dropdown
         )
 
     async def calculate_tdee(self, e: ft.ControlEvent):
-        """Calcola il TDEE e aggiorna i dati utente"""
+        """Calcola il TDEE con controlli di sicurezza aggiuntivi"""
         try:
             # Validazione input
             if not all([self.weight_input.value, self.height_input.value, self.age_input.value]):
-                self._show_snackbar("Compila tutti i campi numerici!", self.colors['error'])
+                self._show_snackbar("⚠️ Compila tutti i campi numerici!", self.colors['error'])
                 return
 
             if not all([self.activity_input.value, self.goal_input.value]):
-                self._show_snackbar("Seleziona livello di attività e obiettivo!", self.colors['error'])
+                self._show_snackbar("⚠️ Seleziona livello di attività e obiettivo!", self.colors['error'])
                 return
+
+            # Validazione valori di sicurezza
+            weight = float(self.weight_input.value)
+            height = float(self.height_input.value)
+            age = int(self.age_input.value)
+
+            # Controlli di sicurezza
+            if weight < 30 or weight > 300:
+                self._show_snackbar("⚠️ Peso deve essere tra 30 e 300 kg", self.colors['error'])
+                return
+
+            if height < 100 or height > 250:
+                self._show_snackbar("⚠️ Altezza deve essere tra 100 e 250 cm", self.colors['error'])
+                return
+
+            if age < 16 or age > 90:
+                self._show_snackbar("⚠️ Età deve essere tra 16 e 90 anni", self.colors['error'])
+                return
+
+            # Avvertenza per minorenni
+            if age < 18:
+                self._show_snackbar(
+                    "⚠️ ATTENZIONE: Sei minorenne. Consulta un pediatra prima di modificare la tua alimentazione!",
+                    self.colors['warning']
+                )
 
             # Disabilita il pulsante durante il calcolo
             self.calculate_btn.disabled = True
             self.calculate_btn.text = "Calcolando..."
             self.update()
 
-            # Estrai i valori
-            weight = float(self.weight_input.value)
-            height = float(self.height_input.value)
-            age = int(self.age_input.value)
+            # Resto del calcolo (uguale a prima)
             gender = self.gender_selector.value
             activity_level = self.activity_input.value
             goal = self.goal_input.value
-
-            # Validazione valori
-            if weight <= 0 or height <= 0 or age <= 0:
-                raise ValueError("I valori devono essere positivi")
-            if weight > 300 or height > 250 or age > 120:
-                raise ValueError("Valori non realistici inseriti")
 
             # Calcolo BMR (Mifflin-St Jeor Equation)
             if gender == "male":
@@ -325,11 +631,11 @@ Per consigli personalizzati, calcola prima il tuo TDEE nella tab precedente!"""
             multiplier = activity_multipliers.get(activity_key, 1.55)
             tdee = bmr * multiplier
 
-            # Aggiustamenti per obiettivo
+            # Aggiustamenti per obiettivo (più conservativi)
             goal_adjustments = {
-                "Perdita": -300,
+                "Perdita": -250,  # Ridotto per sicurezza
                 "Mantenimento": 0,
-                "Aumento": 300
+                "Aumento": 250  # Ridotto per sicurezza
             }
 
             goal_key = goal.split()[0]
@@ -487,51 +793,61 @@ Per consigli personalizzati, calcola prima il tuo TDEE nella tab precedente!"""
             self.update()
 
     def _add_chat_message(self, sender: str, message: str, is_user: bool, is_welcome: bool = False):
-        """Aggiunge un messaggio alla chat"""
-        # Colore e allineamento basato sul tipo di messaggio
-        if is_user:
-            bg_color = self.colors['primary']
-            text_color = ft.Colors.WHITE
-            alignment = ft.alignment.center_right
-            sender_color = ft.Colors.WHITE
-        elif is_welcome:
-            bg_color = self.colors['surface_light']
-            text_color = self.colors['text_primary']
-            alignment = ft.alignment.center_left
-            sender_color = self.colors['success']
-        else:
-            bg_color = self.colors['surface_light']
-            text_color = self.colors['text_primary']
-            alignment = ft.alignment.center_left
-            sender_color = self.colors['primary']
+        """Messaggi chat con design più moderno"""
 
-        # Crea il container del messaggio
-        message_container = ft.Container(
-            content=ft.Column([
-                ft.Text(
-                    sender,
-                    color=sender_color,
-                    weight=ft.FontWeight.BOLD,
-                    size=12
+        if is_user:
+            # Messaggio utente - design più moderno
+            message_container = ft.Container(
+                content=ft.Column([
+                    ft.Row([
+                        ft.Container(expand=True),  # Spacer per allineamento a destra
+                        ft.Text(message, color=ft.Colors.WHITE, selectable=True, size=14)
+                    ]),
+                    ft.Row([
+                        ft.Container(expand=True),
+                        ft.Text("Tu", size=10, color=ft.Colors.WHITE70, italic=True)
+                    ])
+                ], spacing=3),
+                bgcolor=self.colors['primary'],
+                border_radius=ft.border_radius.only(
+                    top_left=16, top_right=16, bottom_left=16, bottom_right=4
                 ),
-                ft.Text(
-                    message,
-                    color=text_color,
-                    selectable=True  # Permette di selezionare il testo
+                padding=12,
+                margin=ft.margin.only(left=60, right=10, bottom=8),
+                shadow=ft.BoxShadow(
+                    spread_radius=0,
+                    blur_radius=4,
+                    color=ft.Colors.with_opacity(0.1, ft.Colors.BLACK)
                 )
-            ], spacing=5),
-            bgcolor=bg_color,
-            border_radius=12,
-            padding=15,
-            alignment=alignment,
-            margin=ft.margin.only(
-                left=50 if is_user else 0,
-                right=50 if not is_user else 0
             )
-        )
+        else:
+            # Messaggio assistant - design più pulito
+            sender_color = self.colors['success'] if is_welcome else self.colors['primary']
+
+            message_container = ft.Container(
+                content=ft.Column([
+                    ft.Row([
+                        ft.Icon(
+                            ft.Icons.SMART_TOY if sender == "Assistant" else ft.Icons.INFO,
+                            size=16,
+                            color=sender_color
+                        ),
+                        ft.Text(sender, size=10, color=sender_color, weight=ft.FontWeight.BOLD)
+                    ], spacing=5),
+                    ft.Container(height=2),
+                    ft.Text(message, color=self.colors['text_primary'], selectable=True, size=14)
+                ], spacing=0),
+                bgcolor=self.colors['surface_light'],
+                border_radius=ft.border_radius.only(
+                    top_left=4, top_right=16, bottom_left=16, bottom_right=16
+                ),
+                padding=12,
+                margin=ft.margin.only(left=10, right=60, bottom=8),
+                border=ft.border.all(1, ft.Colors.with_opacity(0.1, self.colors['border']))
+            )
 
         self.chat_display.controls.append(message_container)
-        # Solo aggiorna se il controllo è collegato alla pagina
+
         if hasattr(self, 'page') and self.page:
             self.update()
 
